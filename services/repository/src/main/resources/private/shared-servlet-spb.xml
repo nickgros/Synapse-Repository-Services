@@ -11,7 +11,9 @@
                            http://www.springframework.org/schema/context/spring-context-3.0.xsd
                            http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util-3.0.xsd">
 
-	<!-- This bean will intercept all HTTP calls and records access records -->
+<!--    <import resource="classpath:swagger-context.xml" />-->
+
+    <!-- This bean will intercept all HTTP calls and records access records -->
 	<bean id="accessInterceptor"
 		class="org.sagebionetworks.repo.web.AccessInterceptor" />
 
@@ -39,11 +41,14 @@
 	<bean id="jsonObjectHttpMessageConverter"
 		class="org.sagebionetworks.repo.web.controller.JSONObjectHttpMessageConverter" />
 
+    <bean id="stringHttpMessageConverter" class="org.springframework.http.converter.StringHttpMessageConverter" />
+
 	<!-- Setup our own JSON processing. -->
 	<bean id="platformMessageConverters"
 		class="org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter">
 		<property name="messageConverters">
 			<list>
+                <ref bean="stringHttpMessageConverter"/>
 				<ref bean="jsonObjectHttpMessageConverter" />
 				<ref bean="jwtTypeSerializer" />
 				<ref bean="objectTypeSerializer" />

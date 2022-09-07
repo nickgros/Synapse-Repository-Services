@@ -71,6 +71,7 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
 
 /**
  * <p>
@@ -260,7 +261,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
  * </table>
  */
 @ControllerInfo(displayName = "Entity Services", path = "repo/v1")
-@Controller
+@RestController
 @RequestMapping(UrlHelpers.REPO_PATH)
 public class EntityController {
 
