@@ -10,6 +10,9 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
+import org.junit.jupiter.api.parallel.ResourceLock;
 import org.sagebionetworks.client.SynapseAdminClient;
 import org.sagebionetworks.client.SynapseClient;
 import org.sagebionetworks.client.SynapseClientImpl;
@@ -48,6 +51,7 @@ import dev.samstevens.totp.exceptions.TimeProviderException;
 import dev.samstevens.totp.time.SystemTimeProvider;
 import dev.samstevens.totp.time.TimeProvider;
 
+@ResourceLock(providers = SharedITResourceLockProvider.class)
 @ExtendWith(ITTestExtension.class)
 public class ITTwoFactorAuthTest {
 	

@@ -17,6 +17,9 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
+import org.junit.jupiter.api.parallel.ResourceLock;
 import org.sagebionetworks.client.SynapseClient;
 import org.sagebionetworks.repo.model.UserProfile;
 import org.sagebionetworks.repo.model.message.cloudmailin.AuthorizationCheckHeader;
@@ -31,6 +34,7 @@ import org.sagebionetworks.simpleHttpClient.SimpleHttpResponse;
 
 import com.amazonaws.util.IOUtils;
 
+@ResourceLock(providers = SharedITResourceLockProvider.class)
 @ExtendWith(ITTestExtension.class)
 public class ITCloudMailIn {
 	

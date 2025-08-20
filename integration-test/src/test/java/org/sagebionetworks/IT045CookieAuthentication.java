@@ -1,5 +1,7 @@
 package org.sagebionetworks;
 
+import javax.annotation.Resource;
+
 import org.apache.http.client.CookieStore;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.protocol.ClientContext;
@@ -11,6 +13,10 @@ import org.apache.http.protocol.HttpContext;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
+import org.junit.jupiter.api.parallel.ResourceAccessMode;
+import org.junit.jupiter.api.parallel.ResourceLock;
 import org.sagebionetworks.client.SynapseClient;
 import org.sagebionetworks.repo.model.AuthorizationConstants;
 
@@ -19,6 +25,7 @@ import org.sagebionetworks.repo.model.AuthorizationConstants;
  * @author jmhill
  *
  */
+@ResourceLock(providers = SharedITResourceLockProvider.class)
 @ExtendWith(ITTestExtension.class)
 public class IT045CookieAuthentication {
 	

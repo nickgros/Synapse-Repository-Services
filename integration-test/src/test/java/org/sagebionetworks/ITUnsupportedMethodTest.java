@@ -4,6 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
+import org.junit.jupiter.api.parallel.ResourceLock;
 import org.sagebionetworks.client.SynapseClient;
 import org.sagebionetworks.client.SynapseClientImpl;
 import org.sagebionetworks.simpleHttpClient.SimpleHttpClient;
@@ -16,6 +19,7 @@ import org.springframework.http.HttpStatus;
  * Test class created to make API calls that we don't want to extend to the
  * Synapse Java Client.
  */
+@ResourceLock(providers = SharedITResourceLockProvider.class)
 public class ITUnsupportedMethodTest {
 
 	private static SynapseClient synapse;

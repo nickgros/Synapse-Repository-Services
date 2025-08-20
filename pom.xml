@@ -1100,8 +1100,8 @@
 		<log4j.version>2.23.1</log4j.version>
 		<commonslogging.version>1.2</commonslogging.version>
 		<commonscollections4.version>4.1</commonscollections4.version>
-		<junit.jupiter.version>5.10.2</junit.jupiter.version>
-		<junit.vintage.version>5.10.2</junit.vintage.version>
+		<junit.jupiter.version>5.13.4</junit.jupiter.version>
+		<junit.vintage.version>5.13.4</junit.vintage.version>
 		<junit.platform.version>1.10.2</junit.platform.version>
 		<mockito.version>2.27.0</mockito.version>
 		<com.google.cloud.version>1.77.0</com.google.cloud.version>
