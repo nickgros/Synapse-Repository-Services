@@ -1,6 +1,11 @@
 {
 	"description": "Represents a single column assignment (one entry of the SQL SET clause).",
 	"type": "object",
+	"implements": [
+		{
+			"$ref": "org.sagebionetworks.repo.model.grid.update.ColumnAssignment"
+		}
+	],
 	"properties": {
 		"columnName": {
 			"type": "string",

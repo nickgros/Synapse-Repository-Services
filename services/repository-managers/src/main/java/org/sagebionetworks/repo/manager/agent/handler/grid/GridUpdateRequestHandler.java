@@ -32,9 +32,10 @@ import org.sagebionetworks.repo.model.grid.EventSource;
 import org.sagebionetworks.repo.model.grid.GridConnectionInfo;
 import org.sagebionetworks.repo.model.grid.patch.ConType;
 import org.sagebionetworks.repo.model.grid.patch.ConValue;
+import org.sagebionetworks.repo.model.grid.update.ColumnAssignment;
 import org.sagebionetworks.repo.model.grid.update.GridUpdateRequest;
 import org.sagebionetworks.repo.model.grid.update.GridUpdateResponse;
-import org.sagebionetworks.repo.model.grid.update.SetValue;
+import org.sagebionetworks.repo.model.grid.update.SetLiteralValue;
 import org.sagebionetworks.repo.model.grid.update.Update;
 import org.sagebionetworks.repo.model.jdo.JDOSecondaryPropertyUtils;
 import org.sagebionetworks.util.ValidateArgument;
@@ -71,7 +72,7 @@ public class GridUpdateRequestHandler implements OpenApiReturnControlHandler {
 		GridUpdateRequest request = extractRequest(event);
 		ValidateArgument.required(request.getUpdate(), "update");
 		Update update = request.getUpdate();
-		List<SetValue> set = update.getSet();
+		List<ColumnAssignment> set = update.getSet();
 
 		GridAgentSessionContext context = event.getSessionContext(GridAgentSessionContext.class)
 				.orElseThrow(() -> new IllegalArgumentException("GridAgentSessionContext cannot be null"));
@@ -107,15 +108,18 @@ public class GridUpdateRequestHandler implements OpenApiReturnControlHandler {
 				List<ConValue> updates = new ArrayList<>();
 				JSONArray rawSetValueArray =  updateRequestRaw.optJSONObject("update").optJSONArray("set");
 				for (int i = 0; i < set.size(); i++) {
-					SetValue sv = set.get(i);
-					ConValue toAdd = new ConValue(ConType.fromValue(sv.getValue()), sv.getValue());
-					JSONObject rawSetValue = rawSetValueArray.optJSONObject(i);
-					if (!rawSetValue.has("value")) {
-						toAdd = new ConValue(ConType.UNDEFINED, null);
-					} else if (rawSetValue.isNull("value")) {
-						toAdd = new ConValue(ConType.NULL, null);
+					ColumnAssignment sv = set.get(i);
+					if (sv instanceof SetLiteralValue) {
+						SetLiteralValue slv = (SetLiteralValue) sv;
+						ConValue toAdd = new ConValue(ConType.fromValue(slv.getValue()), slv.getValue());
+						JSONObject rawSetValue = rawSetValueArray.optJSONObject(i);
+						if (!rawSetValue.has("value")) {
+							toAdd = new ConValue(ConType.UNDEFINED, null);
+						} else if (rawSetValue.isNull("value")) {
+							toAdd = new ConValue(ConType.NULL, null);
+						}
+						updates.add(toAdd);
 					}
-					updates.add(toAdd);
 				}
 				icp.publish(new UpdateRowChange(row.getRowObject().getData().getVectorId(), updates, indexArray));
 				updateCount++;
@@ -145,7 +149,7 @@ public class GridUpdateRequestHandler implements OpenApiReturnControlHandler {
 		return JDOSecondaryPropertyUtils.createObjectFromJSON(GridUpdateRequest.class, body);
 	}
 
-	Integer[] createIndexArray(List<SetValue> set, GridHeader header) {
+	Integer[] createIndexArray(List<ColumnAssignment> set, GridHeader header) {
 		ValidateArgument.required(set, "set");
 		ValidateArgument.required(header, "header");
 		ValidateArgument.required(header.getOrderedColumns(), "header.orderedColumns");

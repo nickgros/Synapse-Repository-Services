@@ -1,0 +1,16 @@
+{
+	"description": "Assigns a value computed by a server-side transformation on the row's existing data.",
+	"type": "object",
+	"implements": [
+		{
+			"$ref": "org.sagebionetworks.repo.model.grid.update.ColumnAssignment"
+		}
+	],
+	"properties": {
+		"transformation": {
+			"type": "object",
+			"description": "Defines the server-side computation.",
+			"$ref": "org.sagebionetworks.repo.model.grid.update.function.TransformationFunction"
+		}
+	}
+}

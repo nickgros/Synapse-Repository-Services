@@ -1,0 +1,19 @@
+{
+  "description": "Use a regular expression to extract data from a specified column.",
+  "type": "object",
+  "implements": [
+    {
+      "$ref": "org.sagebionetworks.repo.model.grid.update.function.TransformationFunction"
+    }
+  ],
+  "properties": {
+    "regex": {
+      "type": "string",
+      "description": "The regular expression to match."
+    },
+    "group": {
+      "type": "integer",
+      "description": "The capturing group number to extract."
+    }
+  }
+}

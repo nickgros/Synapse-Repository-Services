@@ -5,7 +5,7 @@
 			"description": "Required. Array representing the SQL SET clause; each object specifies a target column and the literal value to assign for all selected rows.",
 			"type": "array",
 			"items": {
-				"$ref": "org.sagebionetworks.repo.model.grid.update.SetValue"
+				"$ref": "org.sagebionetworks.repo.model.grid.update.ColumnAssignment"
 			}
 		},
 		"filters": {

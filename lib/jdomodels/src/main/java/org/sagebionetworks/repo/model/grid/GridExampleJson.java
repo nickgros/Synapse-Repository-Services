@@ -18,7 +18,7 @@ import org.sagebionetworks.repo.model.grid.query.SelectByName;
 import org.sagebionetworks.repo.model.grid.query.SelectSelection;
 import org.sagebionetworks.repo.model.grid.query.ValidationOperator;
 import org.sagebionetworks.repo.model.grid.query.function.CountStar;
-import org.sagebionetworks.repo.model.grid.update.SetValue;
+import org.sagebionetworks.repo.model.grid.update.SetLiteralValue;
 import org.sagebionetworks.repo.model.grid.update.Update;
 import org.sagebionetworks.repo.model.jdo.JDOSecondaryPropertyUtils;
 
@@ -106,7 +106,7 @@ public class GridExampleJson {
 				// Update Example 1
 				new UpdateExample().setDescription("Set age = 25 for rows where age is currently null.")
 						.setUpdate_json(JDOSecondaryPropertyUtils.createJSONFromObject(
-								new Update().setSet(List.of(new SetValue().setColumnName("age").setValue(25)))
+								new Update().setSet(List.of(new SetLiteralValue().setColumnName("age").setValue(25)))
 										.setFilters(List.of(new CellValueFilter().setColumnName("age")
 												.setOperator(CellValueOperator.IS_NULL))))),
 				// Update Example 2
@@ -120,13 +120,13 @@ public class GridExampleJson {
 				// Update Example 3
 				new UpdateExample().setDescription("Set name = 'Dave' for all currently selected rows.")
 						.setUpdate_json(JDOSecondaryPropertyUtils.createJSONFromObject(
-								new Update().setSet(List.of(new SetValue().setColumnName("name").setValue("Dave")))
+								new Update().setSet(List.of(new SetLiteralValue().setColumnName("name").setValue("Dave")))
 										.setFilters(List.of(new RowSelectionFilter().setIsSelected(true))))),
 				// Update Example 4
 				new UpdateExample().setDescription(
 						"Set status = true only for rows with IDs r2 and r5 (explicit RowIdFilter targeting previously retrieved IDs).")
 						.setUpdate_json(JDOSecondaryPropertyUtils.createJSONFromObject(
-								new Update().setSet(List.of(new SetValue().setColumnName("status").setValue(true)))
+								new Update().setSet(List.of(new SetLiteralValue().setColumnName("status").setValue(true)))
 										.setFilters(List.of(new RowIdFilter().setRowIdsIn(List.of("r2", "r5")))))),
 				// Update Example 5
 				new UpdateExample().setDescription(

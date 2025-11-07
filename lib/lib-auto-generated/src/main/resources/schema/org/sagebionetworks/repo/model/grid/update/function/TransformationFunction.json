@@ -1,0 +1,14 @@
+{
+  "description": "A generic function to transform a value.",
+  "type": "interface",
+  "properties": {
+    "sourceColumn": {
+      "type": "string",
+      "description": "Target column name or ID to use as the source of this transformation."
+    },
+    "concreteType": {
+      "type": "string",
+      "description": "Required. Full name of the exact type used."
+    }
+  }
+}

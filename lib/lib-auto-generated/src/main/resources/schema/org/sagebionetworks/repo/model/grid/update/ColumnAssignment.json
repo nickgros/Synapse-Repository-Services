@@ -1,0 +1,14 @@
+{
+	"description": "A generic column assignment.",
+	"type": "interface",
+	"properties": {
+		"columnName": {
+			"type": "string",
+			"description": "Target column name or ID to update."
+		},
+		"concreteType": {
+			"type": "string",
+			"description": "Required. Full name of the exact type used."
+		}
+	}
+}

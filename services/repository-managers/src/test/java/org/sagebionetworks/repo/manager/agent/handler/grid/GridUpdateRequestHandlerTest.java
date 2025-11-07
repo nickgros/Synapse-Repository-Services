@@ -45,8 +45,9 @@ import org.sagebionetworks.repo.model.grid.GridConnectionInfo;
 import org.sagebionetworks.repo.model.grid.patch.ConType;
 import org.sagebionetworks.repo.model.grid.patch.ConValue;
 import org.sagebionetworks.repo.model.grid.patch.LogicalTimestamp;
+import org.sagebionetworks.repo.model.grid.update.ColumnAssignment;
 import org.sagebionetworks.repo.model.grid.update.GridUpdateRequest;
-import org.sagebionetworks.repo.model.grid.update.SetValue;
+import org.sagebionetworks.repo.model.grid.update.SetLiteralValue;
 import org.sagebionetworks.repo.model.grid.update.Update;
 import org.sagebionetworks.repo.model.jdo.JDOSecondaryPropertyUtils;
 
@@ -100,8 +101,8 @@ public class GridUpdateRequestHandlerTest {
 				new GridAgentSessionContext().setGridSessionId(gridSessionId).setUsersReplicaId(usersReplicaId)
 						.setAgentsReplicaId(agentsReplicaId));
 
-		List<SetValue> setValues = List.of(new SetValue().setColumnName("colA").setValue("A1"),
-				new SetValue().setColumnName("colB").setValue("B1"));
+		List<ColumnAssignment> setValues = List.of(new SetLiteralValue().setColumnName("colA").setValue("A1"),
+				new SetLiteralValue().setColumnName("colB").setValue("B1"));
 		GridConnectionInfo internalConn = new GridConnectionInfo().setReplicaId(11L).setSessionId(gridSessionId)
 				.setConnectionId("int-1").setSource(EventSource.INTERNAL);
 		when(mockGridManager.getSingletonConnection(gridSessionId, EventSource.INTERNAL))
@@ -150,7 +151,7 @@ public class GridUpdateRequestHandlerTest {
 				new GridAgentSessionContext().setGridSessionId(gridSessionId).setUsersReplicaId(usersReplicaId)
 						.setAgentsReplicaId(agentsReplicaId));
 
-		List<SetValue> setValues = List.of(new SetValue().setColumnName("colA").setValue(null));
+		List<ColumnAssignment> setValues = List.of(new SetLiteralValue().setColumnName("colA").setValue(null));
 		GridConnectionInfo internalConn = new GridConnectionInfo().setReplicaId(11L).setSessionId(gridSessionId)
 				.setConnectionId("int-2").setSource(EventSource.INTERNAL);
 		when(mockGridManager.getSingletonConnection(gridSessionId, EventSource.INTERNAL))
@@ -194,7 +195,7 @@ public class GridUpdateRequestHandlerTest {
 				new GridAgentSessionContext().setGridSessionId(gridSessionId).setUsersReplicaId(usersReplicaId)
 						.setAgentsReplicaId(agentsReplicaId));
 
-		List<SetValue> setValues = List.of(new SetValue().setColumnName("colA").setValue(null));
+		List<ColumnAssignment> setValues = List.of(new SetLiteralValue().setColumnName("colA").setValue(null));
 		GridConnectionInfo internalConn = new GridConnectionInfo().setReplicaId(11L).setSessionId(gridSessionId)
 				.setConnectionId("int-2").setSource(EventSource.INTERNAL);
 		when(mockGridManager.getSingletonConnection(gridSessionId, EventSource.INTERNAL))
@@ -326,8 +327,8 @@ public class GridUpdateRequestHandlerTest {
 
 	@Test
 	public void testCreateIndexArray() {
-		List<SetValue> set = List.of(new SetValue().setColumnName("a").setValue("1"),
-				new SetValue().setColumnName("b").setValue(3));
+		List<ColumnAssignment> set = List.of(new SetLiteralValue().setColumnName("a").setValue("1"),
+				new SetLiteralValue().setColumnName("b").setValue(3));
 		GridHeader header = new GridHeader().setOrderedColumns(List.of(new Column().setName("a").setVectorIndex(2),
 				new Column().setName("c").setVectorIndex(0), new Column().setName("b").setVectorIndex(1)));
 
@@ -338,7 +339,7 @@ public class GridUpdateRequestHandlerTest {
 
 	@Test
 	public void testCreateIndexArrayWithNullSet() {
-		List<SetValue> set = null;
+		List<ColumnAssignment> set = null;
 		GridHeader header = new GridHeader().setOrderedColumns(List.of(new Column().setName("a").setVectorIndex(2),
 				new Column().setName("c").setVectorIndex(0), new Column().setName("b").setVectorIndex(1)));
 
@@ -350,8 +351,8 @@ public class GridUpdateRequestHandlerTest {
 
 	@Test
 	public void testCreateIndexArrayWithNullHeader() {
-		List<SetValue> set = List.of(new SetValue().setColumnName("a").setValue("1"),
-				new SetValue().setColumnName("b").setValue(3));
+		List<ColumnAssignment> set = List.of(new SetLiteralValue().setColumnName("a").setValue("1"),
+				new SetLiteralValue().setColumnName("b").setValue(3));
 		GridHeader header = null;
 		// call under test
 		IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
@@ -361,8 +362,8 @@ public class GridUpdateRequestHandlerTest {
 
 	@Test
 	public void testCreateIndexArrayWithHeaderColumnsNull() {
-		List<SetValue> set = List.of(new SetValue().setColumnName("a").setValue("1"),
-				new SetValue().setColumnName("b").setValue(3));
+		List<ColumnAssignment> set = List.of(new SetLiteralValue().setColumnName("a").setValue("1"),
+				new SetLiteralValue().setColumnName("b").setValue(3));
 		GridHeader header = new GridHeader().setOrderedColumns(null);
 		// call under test
 		IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
@@ -372,8 +373,8 @@ public class GridUpdateRequestHandlerTest {
 
 	@Test
 	public void testCreateIndexArrayWithNotFound() {
-		List<SetValue> set = List.of(new SetValue().setColumnName("a").setValue("1"),
-				new SetValue().setColumnName("x").setValue(3));
+		List<ColumnAssignment> set = List.of(new SetLiteralValue().setColumnName("a").setValue("1"),
+				new SetLiteralValue().setColumnName("x").setValue(3));
 		GridHeader header = new GridHeader().setOrderedColumns(List.of(new Column().setName("a").setVectorIndex(2),
 				new Column().setName("c").setVectorIndex(0), new Column().setName("b").setVectorIndex(1)));
 		// call under test
@@ -385,7 +386,7 @@ public class GridUpdateRequestHandlerTest {
 	@Test
 	public void testExtractRequest() {
 		GridUpdateRequest expected = new GridUpdateRequest()
-				.setUpdate(new Update().setSet(List.of(new SetValue().setColumnName("a").setValue(1))));
+				.setUpdate(new Update().setSet(List.of(new SetLiteralValue().setColumnName("a").setValue(1))));
 		String json = JDOSecondaryPropertyUtils.createJSONFromObject(expected.getUpdate());
 		event = new ReturnControlEvent(1L, "group", "function", null, List.of(new Parameter("update", "object", json)),
 				new GridAgentSessionContext().setAgentsReplicaId(123L));
@@ -397,7 +398,7 @@ public class GridUpdateRequestHandlerTest {
 	@Test
 	public void testExtractRequestWithJsonArrayValue() {
 		GridUpdateRequest expected = new GridUpdateRequest().setUpdate(
-				new Update().setSet(List.of(new SetValue().setColumnName("a").setValue(new JSONArray("[1,2,3]")))));
+				new Update().setSet(List.of(new SetLiteralValue().setColumnName("a").setValue(new JSONArray("[1,2,3]")))));
 		// the agent can provide a value that is
 		String json = "{\"set\":[{\"columnName\":\"a\",\"value\":[1,2,3]}]}";
 		event = new ReturnControlEvent(1L, "group", "function", null, List.of(new Parameter("update", "object", json)),
@@ -405,14 +406,14 @@ public class GridUpdateRequestHandlerTest {
 		// call under test
 		GridUpdateRequest result = handler.extractRequest(event);
 		assertEquals(expected.toString(), result.toString());
-		Object value = result.getUpdate().getSet().get(0).getValue();
+		Object value = ((SetLiteralValue) result.getUpdate().getSet().get(0)).getValue();
 		assertEquals("[1,2,3]", value.toString());
 	}
 
 	@Test
 	public void testExtractRequestWithJsonObjectValue() {
 		GridUpdateRequest expected = new GridUpdateRequest().setUpdate(new Update()
-				.setSet(List.of(new SetValue().setColumnName("a").setValue(new JSONObject("{\"key\":true}")))));
+				.setSet(List.of(new SetLiteralValue().setColumnName("a").setValue(new JSONObject("{\"key\":true}")))));
 		// the agent can provide a value that is
 		String json = "{\"set\":[{\"columnName\":\"a\",\"value\":{\"key\":true}}]}";
 		event = new ReturnControlEvent(1L, "group", "function", null, List.of(new Parameter("update", "object", json)),
