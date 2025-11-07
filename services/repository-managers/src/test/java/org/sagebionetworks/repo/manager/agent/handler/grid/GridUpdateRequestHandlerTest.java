@@ -47,8 +47,10 @@ import org.sagebionetworks.repo.model.grid.patch.ConValue;
 import org.sagebionetworks.repo.model.grid.patch.LogicalTimestamp;
 import org.sagebionetworks.repo.model.grid.update.ColumnAssignment;
 import org.sagebionetworks.repo.model.grid.update.GridUpdateRequest;
+import org.sagebionetworks.repo.model.grid.update.SetComputedValue;
 import org.sagebionetworks.repo.model.grid.update.SetLiteralValue;
 import org.sagebionetworks.repo.model.grid.update.Update;
+import org.sagebionetworks.repo.model.grid.update.function.RegexExtract;
 import org.sagebionetworks.repo.model.jdo.JDOSecondaryPropertyUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -95,8 +97,10 @@ public class GridUpdateRequestHandlerTest {
 	@Test
 	public void testHandleEventWithSuccessAndNoFiltersAndMultipleRows() throws Exception {
 		String json = "{" +
-				"\"set\": [{\"columnName\": \"colA\", \"value\": \"A1\"},{\"columnName\":\"colB\",\"value\":\"B1\"}]" +
-				"}";
+				"\"set\": [" +
+				"{\"columnName\": \"colA\", \"value\": \"A1\", \"concreteType\":\"org.sagebionetworks.repo.model.grid.update.SetLiteralValue\"}," +
+				"{\"columnName\": \"colB\", \"value\": \"B1\", \"concreteType\":\"org.sagebionetworks.repo.model.grid.update.SetLiteralValue\"}" +
+				"]}";
 		event = new ReturnControlEvent(1L, "group", "function", null, List.of(new Parameter("update", "object", json)),
 				new GridAgentSessionContext().setGridSessionId(gridSessionId).setUsersReplicaId(usersReplicaId)
 						.setAgentsReplicaId(agentsReplicaId));
@@ -143,7 +147,7 @@ public class GridUpdateRequestHandlerTest {
 	@Test
 	public void testHandleEventWithSuccessWithNullValueAndNonNullFilters() throws Exception {
 		String json = "{" +
-				"\"set\": [{\"columnName\": \"colA\", \"value\": null}]," +
+				"\"set\": [{\"columnName\": \"colA\", \"value\": null, \"concreteType\":\"org.sagebionetworks.repo.model.grid.update.SetLiteralValue\"}]," +
 				"\"filters\": [{\"concreteType\": \"org.sagebionetworks.repo.model.grid.query.RowIsValidFilter\",\"value\": true}]," +
 				"\"limit\": 5" +
 				"}";
@@ -187,7 +191,7 @@ public class GridUpdateRequestHandlerTest {
 	@Test
 	public void testHandleEventWithSuccessWithUndefinedValue() throws Exception {
 		String json = "{" +
-				"\"set\": [{\"columnName\": \"colA\"}]," +
+				"\"set\": [{\"columnName\": \"colA\", \"concreteType\":\"org.sagebionetworks.repo.model.grid.update.SetLiteralValue\"}]," +
 				"\"filters\": [{\"concreteType\": \"org.sagebionetworks.repo.model.grid.query.RowIsValidFilter\",\"value\": true}]," +
 				"\"limit\": 5" +
 				"}";
@@ -232,7 +236,7 @@ public class GridUpdateRequestHandlerTest {
 	@Test
 	public void testHandleEventWithSuccess_ZeroRows_NoPublish() throws Exception {
 		String json = "{" +
-				"\"set\": [{\"columnName\": \"colA\", \"value\": \"v\"}]," +
+				"\"set\": [{\"columnName\": \"colA\", \"value\": \"v\", \"concreteType\":\"org.sagebionetworks.repo.model.grid.update.SetLiteralValue\"}]," +
 				"\"limit\": 10" +
 				"}";
 		event = new ReturnControlEvent(1L, "group", "function", null, List.of(new Parameter("update", "object", json)),
@@ -400,7 +404,7 @@ public class GridUpdateRequestHandlerTest {
 		GridUpdateRequest expected = new GridUpdateRequest().setUpdate(
 				new Update().setSet(List.of(new SetLiteralValue().setColumnName("a").setValue(new JSONArray("[1,2,3]")))));
 		// the agent can provide a value that is
-		String json = "{\"set\":[{\"columnName\":\"a\",\"value\":[1,2,3]}]}";
+		String json = "{\"set\":[{\"columnName\":\"a\",\"value\":[1,2,3], \"concreteType\":\"org.sagebionetworks.repo.model.grid.update.SetLiteralValue\"}]}";
 		event = new ReturnControlEvent(1L, "group", "function", null, List.of(new Parameter("update", "object", json)),
 				new GridAgentSessionContext().setAgentsReplicaId(123L));
 		// call under test
@@ -415,7 +419,7 @@ public class GridUpdateRequestHandlerTest {
 		GridUpdateRequest expected = new GridUpdateRequest().setUpdate(new Update()
 				.setSet(List.of(new SetLiteralValue().setColumnName("a").setValue(new JSONObject("{\"key\":true}")))));
 		// the agent can provide a value that is
-		String json = "{\"set\":[{\"columnName\":\"a\",\"value\":{\"key\":true}}]}";
+		String json = "{\"set\":[{\"columnName\":\"a\",\"value\":{\"key\":true},\"concreteType\":\"org.sagebionetworks.repo.model.grid.update.SetLiteralValue\"}]}";
 		event = new ReturnControlEvent(1L, "group", "function", null, List.of(new Parameter("update", "object", json)),
 				new GridAgentSessionContext().setAgentsReplicaId(123L));
 		// call under test
@@ -434,7 +438,8 @@ public class GridUpdateRequestHandlerTest {
 
 	@Test
 	public void testHandleEventWithCellValueFilterNullValue() throws Exception {
-		String json = "{\"set\":[{\"columnName\":\"lastFed\",\"value\":\"2024-01-15\"}],\"filters\":[{\"concreteType\":\"org.sagebionetworks.repo.model.grid.query.CellValueFilter\",\"columnName\":\"favoriteFoods\",\"operator\":\"IS_NOT_NULL\"}]}";
+		String json = "{\"set\":[{\"columnName\":\"lastFed\",\"value\":\"2024-01-15\", \"concreteType\":\"org.sagebionetworks.repo.model.grid.update.SetLiteralValue\"}]," +
+				"\"filters\":[{\"concreteType\":\"org.sagebionetworks.repo.model.grid.query.CellValueFilter\",\"columnName\":\"favoriteFoods\",\"operator\":\"IS_NOT_NULL\"}]}";
 		event = new ReturnControlEvent(1L, "group", "function", null, List.of(new Parameter("update", "object", json)),
 				new GridAgentSessionContext().setGridSessionId(gridSessionId).setUsersReplicaId(usersReplicaId)
 						.setAgentsReplicaId(agentsReplicaId));
@@ -462,5 +467,221 @@ public class GridUpdateRequestHandlerTest {
 		verify(mockIntendedChangePublisher, times(2)).publish(any());
 		verify(mockIntendedChangePublisher).close();
 
+	}
+
+	@Test
+	public void testHandleEventWithComputedRegexExtract() throws Exception {
+		String json = "{\"set\":[" +
+			"{\"concreteType\":\"org.sagebionetworks.repo.model.grid.update.SetComputedValue\",\"columnName\":\"date\"," +
+				"\"transformation\":{\"concreteType\":\"org.sagebionetworks.repo.model.grid.update.function.RegexExtract\",\"sourceColumn\":\"name\",\"regex\":\"(\\\\d{4}-\\\\d{2}-\\\\d{2})\", \"group\": 1}} ," +
+			"{\"concreteType\":\"org.sagebionetworks.repo.model.grid.update.SetComputedValue\",\"columnName\":\"sampleId\"," +
+				"\"transformation\":{\"concreteType\":\"org.sagebionetworks.repo.model.grid.update.function.RegexExtract\",\"sourceColumn\":\"name\",\"regex\":\"SAMPLE-([A-Z0-9-]+)\", \"group\": 1}} ]," +
+			"\"filters\":[{\"concreteType\":\"org.sagebionetworks.repo.model.grid.query.CellValueFilter\",\"columnName\":\"date\",\"operator\":\"IS_NULL\"}]}";
+
+		event = new ReturnControlEvent(1L, "group", "function", null, List.of(new Parameter("update", "object", json)),
+				new GridAgentSessionContext().setGridSessionId(gridSessionId).setUsersReplicaId(usersReplicaId)
+					.setAgentsReplicaId(agentsReplicaId));
+
+		GridConnectionInfo internalConn = new GridConnectionInfo().setReplicaId(11L).setSessionId(gridSessionId)
+				.setConnectionId("int-1").setSource(EventSource.INTERNAL);
+		when(mockGridManager.getSingletonConnection(gridSessionId, EventSource.INTERNAL))
+				.thenReturn(Optional.of(internalConn));
+		GridConnectionInfo agentConn = new GridConnectionInfo().setReplicaId(agentsReplicaId)
+				.setSessionId(gridSessionId).setConnectionId("agent-1").setSource(EventSource.AGENT);
+		when(mockGridManager.getConnection(gridSessionId, agentsReplicaId)).thenReturn(Optional.of(agentConn));
+
+		// header: name(0), date(1), sampleId(2)
+		GridHeader header = buildHeader(List.of(new Column().setName("name").setVectorIndex(0),
+				new Column().setName("date").setVectorIndex(1), new Column().setName("sampleId").setVectorIndex(2)));
+		when(mockGridViewManager.readHeader(gridSessionId, internalConn.getReplicaId(), usersReplicaId))
+				.thenReturn(Optional.of(header));
+
+		// two rows with name values
+		RowView r1 = buildRow(1L, 100L);
+		r1.getRowObject().getData().setCells(List.of(new ConValue(ConType.STRING, "file_2025-11-07_SAMPLE-123.csv"),
+				new ConValue(ConType.UNDEFINED, null), new ConValue(ConType.UNDEFINED, null)));
+		RowView r2 = buildRow(1L, 101L);
+		r2.getRowObject().getData().setCells(List.of(new ConValue(ConType.STRING, "file_2025-12-01_SAMPLE-XYZ-9.csv"),
+				new ConValue(ConType.UNDEFINED, null), new ConValue(ConType.UNDEFINED, null)));
+		List<RowView> rows = List.of(r1, r2);
+		when(mockGridViewManager.getQueryIterator(eq(header), any(QueryElement.class))).thenReturn(rows.iterator());
+
+		doReturn(mockIntendedChangePublisher).when(handler).newIntendedChangePublisher(agentConn,
+			header.getClockSequenceMaximum(), mockPatchBuilderPublisher);
+
+		// call under test
+		String result = handler.handleEvent(event);
+
+		assertEquals("{\"rowsUpdated\":2}", result);
+		ArgumentCaptor<UpdateRowChange> cap = ArgumentCaptor.forClass(UpdateRowChange.class);
+		verify(mockIntendedChangePublisher, times(2)).publish(cap.capture());
+		for (int i = 0; i < cap.getAllValues().size(); i++) {
+			UpdateRowChange c = cap.getAllValues().get(i);
+			List<ConValue> u = c.getRowData();
+			assertEquals(2, u.size());
+			if (i == 0) {
+				assertEquals(new ConValue(ConType.STRING, "2025-11-07"), u.get(0));
+				assertEquals(new ConValue(ConType.STRING, "123"), u.get(1));
+			} else {
+				assertEquals(new ConValue(ConType.STRING, "2025-12-01"), u.get(0));
+				assertEquals(new ConValue(ConType.STRING, "XYZ-9"), u.get(1));
+			}
+		}
+		verify(mockIntendedChangePublisher).close();
+	}
+
+	@Test
+	public void testComputedMissingTransformation() throws Exception {
+		GridHeader header = buildHeader(List.of(new Column().setName("foo").setVectorIndex(0)));
+		SetComputedValue setComputedValue = new SetComputedValue()
+				.setColumnName("foo")
+				.setTransformation(null);
+
+
+		IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+				handler.handleComputedValue(setComputedValue, header, buildRow(1L, 1L)));
+		assertEquals("SetComputedValue.transformation is required.", ex.getMessage());
+	}
+
+	@Test
+	public void testComputedMissingSourceColumn() throws Exception {
+		GridHeader header = buildHeader(List.of(new Column().setName("foo").setVectorIndex(0)));
+		SetComputedValue setComputedValue = new SetComputedValue()
+				.setColumnName("foo")
+				.setTransformation(new RegexExtract().setSourceColumn(null).setRegex("(^foo$)").setGroup(1L));
+
+		// Call under test
+		IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+				handler.handleComputedValue(setComputedValue, header, buildRow(1L, 1L)));
+		assertEquals("SetComputedValue.transformation.sourceColumn is required.", ex.getMessage());
+	}
+
+	@Test
+	public void testComputedSourceColumnNotFound() throws Exception {
+		String json = "{\"set\":[{\"concreteType\":\"org.sagebionetworks.repo.model.grid.update.SetComputedValue\",\"columnName\":\"date\",\"transformation\":{\"concreteType\":\"org.sagebionetworks.repo.model.grid.update.function.RegexExtract\",\"sourceColumn\":\"missing\",\"regex\":\"(\\\\d{4}-\\\\d{2}-\\\\d{2})\",\"group\":1}}],\"limit\":1}";
+		event = new ReturnControlEvent(1L, "group", "function", null, List.of(new Parameter("update", "object", json)),
+				new GridAgentSessionContext().setGridSessionId(gridSessionId).setUsersReplicaId(usersReplicaId)
+					.setAgentsReplicaId(agentsReplicaId));
+
+		GridConnectionInfo internalConn = new GridConnectionInfo().setReplicaId(11L).setSessionId(gridSessionId)
+				.setConnectionId("int-1").setSource(EventSource.INTERNAL);
+		when(mockGridManager.getSingletonConnection(gridSessionId, EventSource.INTERNAL))
+				.thenReturn(Optional.of(internalConn));
+		GridConnectionInfo agentConn = new GridConnectionInfo().setReplicaId(agentsReplicaId)
+				.setSessionId(gridSessionId).setConnectionId("agent-1").setSource(EventSource.AGENT);
+		when(mockGridManager.getConnection(gridSessionId, agentsReplicaId)).thenReturn(Optional.of(agentConn));
+
+		// header does not include 'missing'
+		GridHeader header = buildHeader(List.of(new Column().setName("name").setVectorIndex(0),
+				new Column().setName("date").setVectorIndex(1)));
+		when(mockGridViewManager.readHeader(gridSessionId, internalConn.getReplicaId(), usersReplicaId))
+				.thenReturn(Optional.of(header));
+		List<RowView> rows = List.of(buildRow(1L, 1L));
+		when(mockGridViewManager.getQueryIterator(eq(header), any(QueryElement.class))).thenReturn(rows.iterator());
+		doReturn(mockIntendedChangePublisher).when(handler).newIntendedChangePublisher(agentConn,
+			header.getClockSequenceMaximum(), mockPatchBuilderPublisher);
+
+		IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> handler.handleEvent(event));
+		assertEquals("Source column name: missing not found.", ex.getMessage());
+	}
+
+	@Test
+	public void testComputedSourceCellUndefined() throws Exception {
+		String json = "{\"set\":[{\"concreteType\":\"org.sagebionetworks.repo.model.grid.update.SetComputedValue\",\"columnName\":\"date\",\"transformation\":{\"concreteType\":\"org.sagebionetworks.repo.model.grid.update.function.RegexExtract\",\"sourceColumn\":\"name\",\"regex\":\"(\\\\d{4}-\\\\d{2}-\\\\d{2})\",\"group\":1}}],\"filters\":[{\"concreteType\":\"org.sagebionetworks.repo.model.grid.query.RowIsValidFilter\",\"value\":true}]}";
+		event = new ReturnControlEvent(1L, "group", "function", null, List.of(new Parameter("update", "object", json)),
+				new GridAgentSessionContext().setGridSessionId(gridSessionId).setUsersReplicaId(usersReplicaId)
+					.setAgentsReplicaId(agentsReplicaId));
+
+		GridConnectionInfo internalConn = new GridConnectionInfo().setReplicaId(11L).setSessionId(gridSessionId)
+				.setConnectionId("int-1").setSource(EventSource.INTERNAL);
+		when(mockGridManager.getSingletonConnection(gridSessionId, EventSource.INTERNAL))
+				.thenReturn(Optional.of(internalConn));
+		GridConnectionInfo agentConn = new GridConnectionInfo().setReplicaId(agentsReplicaId)
+				.setSessionId(gridSessionId).setConnectionId("agent-1").setSource(EventSource.AGENT);
+		when(mockGridManager.getConnection(gridSessionId, agentsReplicaId)).thenReturn(Optional.of(agentConn));
+
+		GridHeader header = buildHeader(List.of(new Column().setName("name").setVectorIndex(0),
+				new Column().setName("date").setVectorIndex(1)));
+		when(mockGridViewManager.readHeader(gridSessionId, internalConn.getReplicaId(), usersReplicaId))
+				.thenReturn(Optional.of(header));
+		// row with NO cells (cells null)
+		RowView r = buildRow(1L, 100L);
+		List<RowView> rows = List.of(r);
+		when(mockGridViewManager.getQueryIterator(eq(header), any(QueryElement.class))).thenReturn(rows.iterator());
+		doReturn(mockIntendedChangePublisher).when(handler).newIntendedChangePublisher(agentConn,
+			header.getClockSequenceMaximum(), mockPatchBuilderPublisher);
+
+		String result = handler.handleEvent(event);
+		assertEquals("{\"rowsUpdated\":1}", result);
+		ArgumentCaptor<UpdateRowChange> cap = ArgumentCaptor.forClass(UpdateRowChange.class);
+		verify(mockIntendedChangePublisher).publish(cap.capture());
+		UpdateRowChange c = cap.getValue();
+		assertEquals(1, c.getRowData().size());
+		assertEquals(new ConValue(ConType.UNDEFINED, null), c.getRowData().get(0));
+	}
+
+	@Test
+	public void testComputedRegexNoMatch() throws Exception {
+		String json = "{\"set\":[{\"concreteType\":\"org.sagebionetworks.repo.model.grid.update.SetComputedValue\",\"columnName\":\"date\",\"transformation\":{\"concreteType\":\"org.sagebionetworks.repo.model.grid.update.function.RegexExtract\",\"sourceColumn\":\"name\",\"regex\":\"(\\\\d{4}-\\\\d{2}-\\\\d{2})\",\"group\":1}}],\"limit\":1}";
+		event = new ReturnControlEvent(1L, "group", "function", null, List.of(new Parameter("update", "object", json)),
+				new GridAgentSessionContext().setGridSessionId(gridSessionId).setUsersReplicaId(usersReplicaId)
+					.setAgentsReplicaId(agentsReplicaId));
+
+		GridConnectionInfo internalConn = new GridConnectionInfo().setReplicaId(11L).setSessionId(gridSessionId)
+				.setConnectionId("int-1").setSource(EventSource.INTERNAL);
+		when(mockGridManager.getSingletonConnection(gridSessionId, EventSource.INTERNAL))
+				.thenReturn(Optional.of(internalConn));
+		GridConnectionInfo agentConn = new GridConnectionInfo().setReplicaId(agentsReplicaId)
+				.setSessionId(gridSessionId).setConnectionId("agent-1").setSource(EventSource.AGENT);
+		when(mockGridManager.getConnection(gridSessionId, agentsReplicaId)).thenReturn(Optional.of(agentConn));
+
+		GridHeader header = buildHeader(List.of(new Column().setName("name").setVectorIndex(0),
+				new Column().setName("date").setVectorIndex(1)));
+		when(mockGridViewManager.readHeader(gridSessionId, internalConn.getReplicaId(), usersReplicaId))
+				.thenReturn(Optional.of(header));
+		RowView r1 = buildRow(1L, 100L);
+		r1.getRowObject().getData().setCells(List.of(new ConValue(ConType.STRING, "no_date_here"), new ConValue(ConType.UNDEFINED, null)));
+		List<RowView> rows = List.of(r1);
+		when(mockGridViewManager.getQueryIterator(eq(header), any(QueryElement.class))).thenReturn(rows.iterator());
+		doReturn(mockIntendedChangePublisher).when(handler).newIntendedChangePublisher(agentConn,
+			header.getClockSequenceMaximum(), mockPatchBuilderPublisher);
+
+		String result = handler.handleEvent(event);
+		assertEquals("{\"rowsUpdated\":1}", result);
+		ArgumentCaptor<UpdateRowChange> cap = ArgumentCaptor.forClass(UpdateRowChange.class);
+		verify(mockIntendedChangePublisher).publish(cap.capture());
+		UpdateRowChange c = cap.getValue();
+		assertEquals(1, c.getRowData().size());
+		assertEquals(new ConValue(ConType.NULL, null), c.getRowData().get(0));
+	}
+
+	@Test
+	public void testComputedGroupIndexOutOfRange() throws Exception {
+		String json = "{\"set\":[{\"concreteType\":\"org.sagebionetworks.repo.model.grid.update.SetComputedValue\",\"columnName\":\"date\",\"transformation\":{\"concreteType\":\"org.sagebionetworks.repo.model.grid.update.function.RegexExtract\",\"sourceColumn\":\"name\",\"regex\":\"(\\\\d{4})\",\"group\":5}}],\"limit\":1}";
+		event = new ReturnControlEvent(1L, "group", "function", null, List.of(new Parameter("update", "object", json)),
+				new GridAgentSessionContext().setGridSessionId(gridSessionId).setUsersReplicaId(usersReplicaId)
+					.setAgentsReplicaId(agentsReplicaId));
+
+		GridConnectionInfo internalConn = new GridConnectionInfo().setReplicaId(11L).setSessionId(gridSessionId)
+				.setConnectionId("int-1").setSource(EventSource.INTERNAL);
+		when(mockGridManager.getSingletonConnection(gridSessionId, EventSource.INTERNAL))
+				.thenReturn(Optional.of(internalConn));
+		GridConnectionInfo agentConn = new GridConnectionInfo().setReplicaId(agentsReplicaId)
+				.setSessionId(gridSessionId).setConnectionId("agent-1").setSource(EventSource.AGENT);
+		when(mockGridManager.getConnection(gridSessionId, agentsReplicaId)).thenReturn(Optional.of(agentConn));
+
+		GridHeader header = buildHeader(List.of(new Column().setName("name").setVectorIndex(0),
+				new Column().setName("date").setVectorIndex(1)));
+		when(mockGridViewManager.readHeader(gridSessionId, internalConn.getReplicaId(), usersReplicaId))
+				.thenReturn(Optional.of(header));
+		RowView r1 = buildRow(1L, 100L);
+		r1.getRowObject().getData().setCells(List.of(new ConValue(ConType.STRING, "2025"), new ConValue(ConType.UNDEFINED, null)));
+		List<RowView> rows = List.of(r1);
+		when(mockGridViewManager.getQueryIterator(eq(header), any(QueryElement.class))).thenReturn(rows.iterator());
+		doReturn(mockIntendedChangePublisher).when(handler).newIntendedChangePublisher(agentConn,
+			header.getClockSequenceMaximum(), mockPatchBuilderPublisher);
+
+		IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> handler.handleEvent(event));
+		assertEquals(true, ex.getMessage().startsWith("Requested group index"));
 	}
 }

@@ -5,6 +5,8 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.apache.logging.log4j.LogManager;
@@ -35,8 +37,11 @@ import org.sagebionetworks.repo.model.grid.patch.ConValue;
 import org.sagebionetworks.repo.model.grid.update.ColumnAssignment;
 import org.sagebionetworks.repo.model.grid.update.GridUpdateRequest;
 import org.sagebionetworks.repo.model.grid.update.GridUpdateResponse;
+import org.sagebionetworks.repo.model.grid.update.SetComputedValue;
 import org.sagebionetworks.repo.model.grid.update.SetLiteralValue;
 import org.sagebionetworks.repo.model.grid.update.Update;
+import org.sagebionetworks.repo.model.grid.update.function.RegexExtract;
+import org.sagebionetworks.repo.model.grid.update.function.TransformationFunction;
 import org.sagebionetworks.repo.model.jdo.JDOSecondaryPropertyUtils;
 import org.sagebionetworks.util.ValidateArgument;
 import org.springframework.stereotype.Service;
@@ -100,25 +105,22 @@ public class GridUpdateRequestHandler implements OpenApiReturnControlHandler {
 		// The auto-generated class loses the raw JSON null vs undefined info, which we need because it has semantic meaning for updates.
 		// We can re-construct that by getting the raw JSON object.
 		JSONObject updateRequestRaw = new JSONObject(event.getRequestBody().get());
+		JSONArray rawSetValueArray = updateRequestRaw.optJSONObject("update").optJSONArray("set");
 
 		try (IntendedChangePublisher icp = newIntendedChangePublisher(agentConnection, header.getClockSequenceMaximum(),
 				patchBuilderPublisher)) {
 			while (rows.hasNext()) {
 				RowView row = rows.next();
 				List<ConValue> updates = new ArrayList<>();
-				JSONArray rawSetValueArray =  updateRequestRaw.optJSONObject("update").optJSONArray("set");
-				for (int i = 0; i < set.size(); i++) {
-					ColumnAssignment sv = set.get(i);
-					if (sv instanceof SetLiteralValue) {
-						SetLiteralValue slv = (SetLiteralValue) sv;
-						ConValue toAdd = new ConValue(ConType.fromValue(slv.getValue()), slv.getValue());
-						JSONObject rawSetValue = rawSetValueArray.optJSONObject(i);
-						if (!rawSetValue.has("value")) {
-							toAdd = new ConValue(ConType.UNDEFINED, null);
-						} else if (rawSetValue.isNull("value")) {
-							toAdd = new ConValue(ConType.NULL, null);
-						}
-						updates.add(toAdd);
+				for (int i = 0; i < rawSetValueArray.length(); i++) {
+					ColumnAssignment columnAssignment = update.getSet().get(i);
+					if (columnAssignment instanceof SetComputedValue) {
+						updates.add(handleComputedValue((SetComputedValue) columnAssignment, header, row));
+					} else if (columnAssignment instanceof SetLiteralValue) {
+						JSONObject rawSetLiteralValue = rawSetValueArray.optJSONObject(i);
+						updates.add(handleLiteralValue(rawSetLiteralValue));
+					} else {
+						throw new IllegalArgumentException("Unknown ColumnAssignment type: " + columnAssignment.getConcreteType());
 					}
 				}
 				icp.publish(new UpdateRowChange(row.getRowObject().getData().getVectorId(), updates, indexArray));
@@ -127,6 +129,18 @@ public class GridUpdateRequestHandler implements OpenApiReturnControlHandler {
 		}
 
 		return buildResponseJSON(updateCount);
+	}
+
+	private static ConValue handleLiteralValue(JSONObject rawSetLiteralValue) {
+		// Literal. Use the raw JSON value since the auto-generated model does not discern between null/undefined.
+		Object value = rawSetLiteralValue.has("value") ? rawSetLiteralValue.opt("value") : null;
+		ConValue toAdd = new ConValue(ConType.fromValue(value), value);
+		if (!rawSetLiteralValue.has("value")) {
+			toAdd = new ConValue(ConType.UNDEFINED, null);
+		} else if (rawSetLiteralValue.isNull("value")) {
+			toAdd = new ConValue(ConType.NULL, null);
+		}
+		return toAdd;
 	}
 
 	IntendedChangePublisher newIntendedChangePublisher(GridConnectionInfo connInfo, Long maxClockSeq,
@@ -162,6 +176,68 @@ public class GridUpdateRequestHandler implements OpenApiReturnControlHandler {
 			}
 			return idx;
 		}).toArray(Integer[]::new);
+	}
+
+	/**
+	 * Handle a SetComputedValue JSON object and return the computed ConValue.
+	 */
+	ConValue handleComputedValue(SetComputedValue setComputedValue, GridHeader header, RowView row) {
+		TransformationFunction transformation = setComputedValue.getTransformation();
+		ValidateArgument.required(transformation, "SetComputedValue.transformation");
+		ValidateArgument.required(transformation.getSourceColumn(), "SetComputedValue.transformation.sourceColumn");
+
+		// Build a map of column name -> index for quick lookup
+		Map<String, Integer> indexByName = header.getOrderedColumns().stream()
+				.collect(Collectors.toMap(Column::getName, Column::getVectorIndex));
+		Integer srcIdx = indexByName.get(transformation.getSourceColumn());
+		if (srcIdx == null) {
+			throw new IllegalArgumentException("Source column name: " + transformation.getSourceColumn() + " not found.");
+		}
+
+		// Get the source cell's ConValue
+		List<ConValue> cells = row.getRowObject().getData().getCells();
+		ConValue src = null;
+		if (cells == null || srcIdx < 0 || srcIdx >= cells.size()) {
+			src = new ConValue(ConType.UNDEFINED, null);
+		} else {
+			src = cells.get(srcIdx);
+		}
+
+		// Handle source undefined/null
+		if (src == null || src.isUndefined()) {
+			return new ConValue(ConType.UNDEFINED, null);
+		}
+		if (ConType.NULL.equals(src.getType())) {
+			return new ConValue(ConType.NULL, null);
+		}
+
+		if (transformation instanceof RegexExtract) {
+			RegexExtract regexExtract = (RegexExtract) transformation;
+			String pattern = regexExtract.getRegex();
+			Long group = regexExtract.getGroup();
+			ValidateArgument.required(pattern, "RegexExtract.regex");
+			ValidateArgument.required(group, "RegexExtract.group");
+
+			Object rawVal = src.getValue();
+			String text = rawVal == null ? null : rawVal.toString();
+			if (text == null) {
+				return new ConValue(ConType.UNDEFINED, null);
+			}
+			Pattern p = Pattern.compile(pattern);
+			Matcher m = p.matcher(text);
+			if (!m.find()) {
+				return new ConValue(ConType.NULL, null);
+			}
+			String extracted = null;
+			try {
+				extracted = m.group(group.intValue());
+			} catch (IndexOutOfBoundsException e) {
+				throw new IllegalArgumentException("Requested group index " + group + " out of range for pattern: " + pattern);
+			}
+			return new ConValue(ConType.STRING, extracted);
+		} else {
+			throw new IllegalArgumentException("Unsupported transformation function: " + transformation.getConcreteType());
+		}
 	}
 
 	@Override
