@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+// Extract new "OperationStream" interface/class that patch implements
 public class Patch {
 
 	private LogicalTimestamp patchId;

@@ -25,7 +25,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.sagebionetworks.repo.model.grid.GridUtils;
-import org.sagebionetworks.repo.model.grid.node.ArrayNode;
+import org.sagebionetworks.repo.model.grid.node.RGANode;
 import org.sagebionetworks.repo.model.grid.node.ConstantNode;
 import org.sagebionetworks.repo.model.grid.node.IndexNode;
 import org.sagebionetworks.repo.model.grid.node.IndexType;
@@ -602,21 +602,21 @@ public class GridIndexDaoImplTest {
 		LogicalTimestamp arrOneId = new LogicalTimestamp().setReplicaId(4L).setSequenceNumber(44L);
 		LogicalTimestamp arrTwoId = new LogicalTimestamp().setReplicaId(5L).setSequenceNumber(44L);
 
-		List<ArrayNode> valuesOne = List.of(
-				new ArrayNode().setArrayId(arrOneId).setNodeId(ids.get(0)).setDataId(ids.get(1))
-						.setReferenceNodeId(arrOneId).setIsDeleted(false),
-				new ArrayNode().setArrayId(arrOneId).setNodeId(ids.get(2)).setDataId(ids.get(3))
-						.setReferenceNodeId(ids.get(0)).setIsDeleted(false),
-				new ArrayNode().setArrayId(arrOneId).setNodeId(ids.get(4)).setDataId(ids.get(5))
-						.setReferenceNodeId(ids.get(2)).setIsDeleted(false));
+		List<RGANode> valuesOne = List.of(
+				new RGANode().setNodeId(arrOneId).setDataId(ids.get(0)).setDataId(ids.get(1))
+						.setRefId(arrOneId).setIsDeleted(false),
+				new RGANode().setNodeId(arrOneId).setDataId(ids.get(2)).setDataId(ids.get(3))
+						.setRefId(ids.get(0)).setIsDeleted(false),
+				new RGANode().setNodeId(arrOneId).setDataId(ids.get(4)).setDataId(ids.get(5))
+						.setRefId(ids.get(2)).setIsDeleted(false));
 
-		List<ArrayNode> valuesTwo = List.of(
-				new ArrayNode().setArrayId(arrTwoId).setNodeId(ids.get(0)).setDataId(ids.get(1))
-						.setReferenceNodeId(arrTwoId).setIsDeleted(false),
-				new ArrayNode().setArrayId(arrTwoId).setNodeId(ids.get(2)).setDataId(ids.get(3))
-						.setReferenceNodeId(ids.get(0)).setIsDeleted(false),
-				new ArrayNode().setArrayId(arrTwoId).setNodeId(ids.get(4)).setDataId(ids.get(5))
-						.setReferenceNodeId(ids.get(2)).setIsDeleted(false));
+		List<RGANode> valuesTwo = List.of(
+				new RGANode().setNodeId(arrTwoId).setDataId(ids.get(0)).setDataId(ids.get(1))
+						.setRefId(arrTwoId).setIsDeleted(false),
+				new RGANode().setNodeId(arrTwoId).setDataId(ids.get(2)).setDataId(ids.get(3))
+						.setRefId(ids.get(0)).setIsDeleted(false),
+				new RGANode().setNodeId(arrTwoId).setDataId(ids.get(4)).setDataId(ids.get(5))
+						.setRefId(ids.get(2)).setIsDeleted(false));
 
 		gridIndexDao.saveIndex(sessionIdOne, replicaIdOne, IndexType.arr, List.of(arrOneId));
 		gridIndexDao.saveIndex(sessionIdTwo, replicaIdTwo, IndexType.arr, List.of(arrTwoId));
@@ -627,88 +627,88 @@ public class GridIndexDaoImplTest {
 		valuesOne.forEach(a -> {
 			// this insert is not a conflict so it should be inserted at it starting
 			// location
-			assertEquals(Optional.of(a.getReferenceNodeId()),
-					gridIndexDao.findArrayInsertLocation(sessionIdOne, replicaIdOne, a));
+			assertEquals(Optional.of(a.getRefId()),
+					gridIndexDao.findRgaInsertLocation(sessionIdOne, replicaIdOne, a));
 			// all under test
 			gridIndexDao.insertIntoArray(sessionIdOne, replicaIdOne, a);
 		});
 		valuesTwo.forEach(a -> {
 			// this insert is not a conflict so it should be inserted at it starting
 			// location
-			assertEquals(Optional.of(a.getReferenceNodeId()),
-					gridIndexDao.findArrayInsertLocation(sessionIdTwo, replicaIdTwo, a));
+			assertEquals(Optional.of(a.getRefId()),
+					gridIndexDao.findRgaInsertLocation(sessionIdTwo, replicaIdTwo, a));
 			// all under test
 			gridIndexDao.insertIntoArray(sessionIdTwo, replicaIdTwo, a);
 		});
 
 		// call under test
 		assertEquals(List.of(valuesOne.get(0), valuesOne.get(1), valuesOne.get(2)),
-				gridIndexDao.getArrayNodesInOrder(sessionIdOne, replicaIdOne, arrOneId, limit, offset));
+				gridIndexDao.getRgaNodesInOrder(sessionIdOne, replicaIdOne, arrOneId, false, limit, offset));
 		assertEquals(List.of(valuesTwo.get(0), valuesTwo.get(1), valuesTwo.get(2)),
-				gridIndexDao.getArrayNodesInOrder(sessionIdTwo, replicaIdTwo, arrTwoId, limit, offset));
+				gridIndexDao.getRgaNodesInOrder(sessionIdTwo, replicaIdTwo, arrTwoId, false, limit, offset));
 
 		// insert a value between 0 and 1
-		ArrayNode toInsert = new ArrayNode().setArrayId(arrOneId).setNodeId(ids.get(6)).setDataId(ids.get(7))
-				.setReferenceNodeId(valuesOne.get(0).getNodeId()).setIsDeleted(false);
+		RGANode toInsert = new RGANode().setNodeId(arrOneId).setDataId(ids.get(6)).setDataId(ids.get(7))
+				.setRefId(valuesOne.get(0).getDataId()).setIsDeleted(false);
 		gridIndexDao.insertIntoArray(sessionIdOne, replicaIdOne, toInsert);
 		// the reference of the old node should now point to the new node.
-		valuesOne.get(1).setReferenceNodeId(toInsert.getNodeId());
+		valuesOne.get(1).setRefId(toInsert.getDataId());
 
 		// call under test
 		assertEquals(List.of(valuesOne.get(0), toInsert, valuesOne.get(1), valuesOne.get(2)),
-				gridIndexDao.getArrayNodesInOrder(sessionIdOne, replicaIdOne, arrOneId, limit, offset));
+				gridIndexDao.getRgaNodesInOrder(sessionIdOne, replicaIdOne, arrOneId, false, limit, offset));
 		assertEquals(List.of(valuesTwo.get(0), valuesTwo.get(1), valuesTwo.get(2)),
-				gridIndexDao.getArrayNodesInOrder(sessionIdTwo, replicaIdTwo, arrTwoId, limit, offset));
+				gridIndexDao.getRgaNodesInOrder(sessionIdTwo, replicaIdTwo, arrTwoId, false, limit, offset));
 
 		// attempt to insert an early data id at the beginning of the array
-		ArrayNode nextInsert = new ArrayNode().setArrayId(arrOneId).setNodeId(ids.get(8)).setDataId(ids.get(0))
-				.setReferenceNodeId(arrOneId);
+		RGANode nextInsert = new RGANode().setNodeId(arrOneId).setDataId(ids.get(8)).setDataId(ids.get(0))
+				.setRefId(arrOneId);
 		// call under test
 		assertEquals(Optional.of(ids.get(4)),
-				gridIndexDao.findArrayInsertLocation(sessionIdOne, replicaIdOne, nextInsert));
+				gridIndexDao.findRgaInsertLocation(sessionIdOne, replicaIdOne, nextInsert));
 
 	}
 
 	@Test
-	public void testFindArrayInsertLocation() {
+	public void testFindRgaInsertLocation() {
 		LogicalTimestamp arrOneId = new LogicalTimestamp().setReplicaId(4L).setSequenceNumber(44L);
 		createArray(sessionIdOne, replicaIdOne, arrOneId);
 
-		List<ArrayNode> valuesOne = List.of(
-				new ArrayNode().setArrayId(arrOneId).setNodeId(ids.get(4)).setDataId(ids.get(1))
-						.setReferenceNodeId(arrOneId).setIsDeleted(false),
-				new ArrayNode().setArrayId(arrOneId).setNodeId(ids.get(5)).setDataId(ids.get(3))
-						.setReferenceNodeId(ids.get(4)).setIsDeleted(false),
-				new ArrayNode().setArrayId(arrOneId).setNodeId(ids.get(6)).setDataId(ids.get(0))
-						.setReferenceNodeId(ids.get(5)).setIsDeleted(false),
-				new ArrayNode().setArrayId(arrOneId).setNodeId(ids.get(7)).setDataId(ids.get(2))
-						.setReferenceNodeId(ids.get(6)).setIsDeleted(false));
+		List<RGANode> valuesOne = List.of(
+				new RGANode().setNodeId(arrOneId).setDataId(ids.get(4)).setDataId(ids.get(1))
+						.setRefId(arrOneId).setIsDeleted(false),
+				new RGANode().setNodeId(arrOneId).setDataId(ids.get(5)).setDataId(ids.get(3))
+						.setRefId(ids.get(4)).setIsDeleted(false),
+				new RGANode().setNodeId(arrOneId).setDataId(ids.get(6)).setDataId(ids.get(0))
+						.setRefId(ids.get(5)).setIsDeleted(false),
+				new RGANode().setNodeId(arrOneId).setDataId(ids.get(7)).setDataId(ids.get(2))
+						.setRefId(ids.get(6)).setIsDeleted(false));
 
 		valuesOne.forEach(a -> {
-			assertEquals(Optional.of(a.getReferenceNodeId()),
-					gridIndexDao.findArrayInsertLocation(sessionIdOne, replicaIdOne, a));
+			assertEquals(Optional.of(a.getRefId()),
+					gridIndexDao.findRgaInsertLocation(sessionIdOne, replicaIdOne, a));
 			gridIndexDao.insertIntoArray(sessionIdOne, replicaIdOne, a);
 		});
 
 		assertEquals(List.of(valuesOne.get(0), valuesOne.get(1), valuesOne.get(2), valuesOne.get(3)),
-				gridIndexDao.getArrayNodesInOrder(sessionIdOne, replicaIdOne, arrOneId, limit, offset));
+				gridIndexDao.getRgaNodesInOrder(sessionIdOne, replicaIdOne, arrOneId, false, limit, offset));
 
 		/*
 		 * Call under test. Insert a node that has a unique ID but also has the same
 		 * data value at the insert position. For such a case an empty result indicates
 		 * that the inserted node would be a duplicates and should not be inserted.
 		 */
-		assertEquals(Optional.empty(), gridIndexDao.findArrayInsertLocation(sessionIdOne, replicaIdOne, new ArrayNode()
-				.setArrayId(arrOneId).setNodeId(ids.get(8)).setDataId(ids.get(1)).setReferenceNodeId(arrOneId)));
+		assertEquals(Optional.empty(), gridIndexDao.findRgaInsertLocation(sessionIdOne, replicaIdOne, new RGANode()
+				.setNodeId(arrOneId).setDataId(ids.get(8)).setDataId(ids.get(1)).setRefId(arrOneId)));
 
 		/*
 		 * Call under test. Insert a node after the third node that has a data value
 		 * larger than the data value of the node already at that position. For this
 		 * cases the new node should be inserted at that exact location.
 		 */
-		assertEquals(Optional.of(valuesOne.get(2).getNodeId()),
-				gridIndexDao.findArrayInsertLocation(sessionIdOne, replicaIdOne, new ArrayNode().setArrayId(arrOneId)
-						.setNodeId(ids.get(8)).setDataId(ids.get(9)).setReferenceNodeId(valuesOne.get(2).getNodeId())));
+		assertEquals(Optional.of(valuesOne.get(2).getDataId()),
+				gridIndexDao.findRgaInsertLocation(sessionIdOne, replicaIdOne, new RGANode().setNodeId(arrOneId)
+						.setDataId(ids.get(8)).setDataId(ids.get(9)).setRefId(valuesOne.get(2).getDataId())));
 
 		/*
 		 * Call under test. Insert a node with a data value that is smaller than all
@@ -716,45 +716,45 @@ public class GridIndexDaoImplTest {
 		 * node should reference the last node in the RGA (appended to the end of the
 		 * array).
 		 */
-		assertEquals(Optional.of(valuesOne.get(3).getNodeId()),
-				gridIndexDao.findArrayInsertLocation(sessionIdOne, replicaIdOne,
-						new ArrayNode().setArrayId(arrOneId).setNodeId(ids.get(8))
+		assertEquals(Optional.of(valuesOne.get(3).getDataId()),
+				gridIndexDao.findRgaInsertLocation(sessionIdOne, replicaIdOne,
+						new RGANode().setNodeId(arrOneId).setDataId(ids.get(8))
 								.setDataId(new LogicalTimestamp().setReplicaId(0L).setSequenceNumber(0L))
-								.setReferenceNodeId(arrOneId)));
+								.setRefId(arrOneId)));
 
 		/*
 		 * Call under test. Insert a node at the start of the array with a data value
 		 * less than the first two nodes in the RGA. The node should be inserted after
 		 * the second node.
 		 */
-		assertEquals(Optional.of(valuesOne.get(1).getNodeId()),
-				gridIndexDao.findArrayInsertLocation(sessionIdOne, replicaIdOne,
-						new ArrayNode().setArrayId(arrOneId).setNodeId(ids.get(8))
+		assertEquals(Optional.of(valuesOne.get(1).getDataId()),
+				gridIndexDao.findRgaInsertLocation(sessionIdOne, replicaIdOne,
+						new RGANode().setNodeId(arrOneId).setDataId(ids.get(8))
 								.setDataId(new LogicalTimestamp().setReplicaId(1L).setSequenceNumber(1L))
-								.setReferenceNodeId(arrOneId)));
+								.setRefId(arrOneId)));
 
 		/*
 		 * Call under test. Same as the previous test but with the first node as a
 		 * reference, should produce the same results as the previous test.
 		 */
-		assertEquals(Optional.of(valuesOne.get(1).getNodeId()),
-				gridIndexDao.findArrayInsertLocation(sessionIdOne, replicaIdOne,
-						new ArrayNode().setArrayId(arrOneId).setNodeId(ids.get(8))
+		assertEquals(Optional.of(valuesOne.get(1).getDataId()),
+				gridIndexDao.findRgaInsertLocation(sessionIdOne, replicaIdOne,
+						new RGANode().setNodeId(arrOneId).setDataId(ids.get(8))
 								.setDataId(new LogicalTimestamp().setReplicaId(1L).setSequenceNumber(1L))
-								.setReferenceNodeId(valuesOne.get(1).getNodeId())));
+								.setRefId(valuesOne.get(1).getDataId())));
 
 		/*
 		 * Call under test. Inserting a node that is already in the RGA should return
 		 * Optional.empty()
 		 */
 		assertEquals(Optional.empty(),
-				gridIndexDao.findArrayInsertLocation(sessionIdOne, replicaIdOne, valuesOne.get(0)));
+				gridIndexDao.findRgaInsertLocation(sessionIdOne, replicaIdOne, valuesOne.get(0)));
 		/*
 		 * Call under test. Inserting a node that is already in the RGA should return
 		 * Optional.empty()
 		 */
 		assertEquals(Optional.empty(),
-				gridIndexDao.findArrayInsertLocation(sessionIdOne, replicaIdOne, valuesOne.get(2)));
+				gridIndexDao.findRgaInsertLocation(sessionIdOne, replicaIdOne, valuesOne.get(2)));
 
 	}
 
@@ -895,156 +895,188 @@ public class GridIndexDaoImplTest {
 	}
 	
 	@Test
-	public void testDeleteArrayNodes() {
+	public void testDeleteRgaNodes() {
 		LogicalTimestamp arrOneId = new LogicalTimestamp().setReplicaId(replicaIdOne).setSequenceNumber(44L);
 		LogicalTimestamp arrTwoId = new LogicalTimestamp().setReplicaId(replicaIdTwo).setSequenceNumber(44L);
 		
 		createArray(sessionIdOne, replicaIdOne, arrOneId);
 		createArray(sessionIdTwo, replicaIdTwo, arrTwoId);
 
-		List<ArrayNode> valuesOne = List.of(
-			new ArrayNode().setArrayId(arrOneId).setNodeId(ids.get(4)).setDataId(ids.get(1))
-					.setReferenceNodeId(arrOneId),
-			new ArrayNode().setArrayId(arrOneId).setNodeId(ids.get(5)).setDataId(ids.get(3))
-					.setReferenceNodeId(ids.get(4)),
-			new ArrayNode().setArrayId(arrOneId).setNodeId(ids.get(6)).setDataId(ids.get(0))
-					.setReferenceNodeId(ids.get(5)),
-			new ArrayNode().setArrayId(arrOneId).setNodeId(ids.get(7)).setDataId(ids.get(2))
-					.setReferenceNodeId(ids.get(6))
+		List<RGANode> valuesOne = List.of(
+			new RGANode().setNodeId(arrOneId).setDataId(ids.get(4)).setDataId(ids.get(1))
+					.setRefId(arrOneId),
+			new RGANode().setNodeId(arrOneId).setDataId(ids.get(5)).setDataId(ids.get(3))
+					.setRefId(ids.get(4)),
+			new RGANode().setNodeId(arrOneId).setDataId(ids.get(6)).setDataId(ids.get(0))
+					.setRefId(ids.get(5)),
+			new RGANode().setNodeId(arrOneId).setDataId(ids.get(7)).setDataId(ids.get(2))
+					.setRefId(ids.get(6))
 		);
 
 		valuesOne.forEach(a -> {
-			assertEquals(Optional.of(a.getReferenceNodeId()),
-					gridIndexDao.findArrayInsertLocation(sessionIdOne, replicaIdOne, a));
+			assertEquals(Optional.of(a.getRefId()),
+					gridIndexDao.findRgaInsertLocation(sessionIdOne, replicaIdOne, a));
 			gridIndexDao.insertIntoArray(sessionIdOne, replicaIdOne, a);
 		});
 		
-		List<ArrayNode> valuesTwo = List.of(
-			new ArrayNode().setArrayId(arrTwoId).setNodeId(ids.get(8)).setDataId(ids.get(1))
-					.setReferenceNodeId(arrTwoId).setIsDeleted(false),
-			new ArrayNode().setArrayId(arrTwoId).setNodeId(ids.get(9)).setDataId(ids.get(3))
-					.setReferenceNodeId(ids.get(8)).setIsDeleted(false)
+		List<RGANode> valuesTwo = List.of(
+			new RGANode().setNodeId(arrTwoId).setDataId(ids.get(8)).setDataId(ids.get(1))
+					.setRefId(arrTwoId).setIsDeleted(false),
+			new RGANode().setNodeId(arrTwoId).setDataId(ids.get(9)).setDataId(ids.get(3))
+					.setRefId(ids.get(8)).setIsDeleted(false)
 		);
 		
 		valuesTwo.forEach(a -> {
-			assertEquals(Optional.of(a.getReferenceNodeId()),
-					gridIndexDao.findArrayInsertLocation(sessionIdTwo, replicaIdTwo, a));
+			assertEquals(Optional.of(a.getRefId()),
+					gridIndexDao.findRgaInsertLocation(sessionIdTwo, replicaIdTwo, a));
 			gridIndexDao.insertIntoArray(sessionIdTwo, replicaIdTwo, a);
 		});
 		
-		List<Timespan> toDelete = valuesOne.stream().map(a -> new Timespan(a.getNodeId(), 1L)).collect(Collectors.toList());
+		List<Timespan> toDelete = valuesOne.stream().map(a -> new Timespan(a.getDataId(), 1L)).collect(Collectors.toList());
 		
 		// Call under test
-		gridIndexDao.deleteArrayNodes(sessionIdOne, replicaIdOne, arrOneId, toDelete);
-		
-		assertEquals(Collections.emptyList(), gridIndexDao.getArrayNodesInOrder(sessionIdOne, replicaIdOne, arrOneId, limit, offset));
-		assertEquals(valuesTwo, gridIndexDao.getArrayNodesInOrder(sessionIdTwo, replicaIdTwo, arrTwoId, limit, offset));
-		
+		gridIndexDao.deleteRgaNodes(sessionIdOne, replicaIdOne, arrOneId, toDelete);
+
+		assertEquals(Collections.emptyList(), gridIndexDao.getRgaNodesInOrder(sessionIdOne, replicaIdOne, arrOneId, false, limit, offset));
+		assertEquals(valuesTwo, gridIndexDao.getRgaNodesInOrder(sessionIdTwo, replicaIdTwo, arrTwoId, false, limit, offset));
+
+		// includeTombstones = true should still return the nodes marked as deleted
+		List<RGANode> valuesOneMarkedAsDeleted = valuesOne.stream()
+			.map(a -> a.setIsDeleted(true))
+			.collect(Collectors.toList());
+		assertEquals(valuesOneMarkedAsDeleted, gridIndexDao.getRgaNodesInOrder(sessionIdOne, replicaIdOne, arrOneId, true, limit, offset));
+		assertEquals(valuesTwo, gridIndexDao.getRgaNodesInOrder(sessionIdTwo, replicaIdTwo, arrTwoId, true, limit, offset));
+
+
 	}
 	
 	@Test
-	public void testDeleteAndInsertArrayNodes() {
+	public void testDeleteAndInsertRgaNodes() {
 		LogicalTimestamp arrOneId = new LogicalTimestamp().setReplicaId(4L).setSequenceNumber(44L);
 		
 		createArray(sessionIdOne, replicaIdOne, arrOneId);
 
-		List<ArrayNode> valuesOne = List.of(
-			new ArrayNode().setArrayId(arrOneId).setNodeId(ids.get(4)).setDataId(ids.get(1))
-				.setReferenceNodeId(arrOneId).setIsDeleted(false),
-			new ArrayNode().setArrayId(arrOneId).setNodeId(ids.get(5)).setDataId(ids.get(3))
-				.setReferenceNodeId(ids.get(4)).setIsDeleted(false),
-			new ArrayNode().setArrayId(arrOneId).setNodeId(ids.get(6)).setDataId(ids.get(0))
-				.setReferenceNodeId(ids.get(5)).setIsDeleted(false)
+		List<RGANode> valuesOne = List.of(
+			new RGANode().setNodeId(arrOneId).setDataId(ids.get(4)).setDataId(ids.get(1))
+				.setRefId(arrOneId).setIsDeleted(false),
+			new RGANode().setNodeId(arrOneId).setDataId(ids.get(5)).setDataId(ids.get(3))
+				.setRefId(ids.get(4)).setIsDeleted(false),
+			new RGANode().setNodeId(arrOneId).setDataId(ids.get(6)).setDataId(ids.get(0))
+				.setRefId(ids.get(5)).setIsDeleted(false)
 		);
 
 		valuesOne.forEach(a -> {
-			assertEquals(Optional.of(a.getReferenceNodeId()), gridIndexDao.findArrayInsertLocation(sessionIdOne, replicaIdOne, a));
+			assertEquals(Optional.of(a.getRefId()), gridIndexDao.findRgaInsertLocation(sessionIdOne, replicaIdOne, a));
 			gridIndexDao.insertIntoArray(sessionIdOne, replicaIdOne, a);
 		});
 
-		assertEquals(valuesOne, gridIndexDao.getArrayNodesInOrder(sessionIdOne, replicaIdOne, arrOneId, limit, offset));
+		assertEquals(valuesOne, gridIndexDao.getRgaNodesInOrder(sessionIdOne, replicaIdOne, arrOneId, false, limit, offset));
 		
 		// Call under test, deletes a node in the middle of the array
-		gridIndexDao.deleteArrayNodes(sessionIdOne, replicaIdOne, arrOneId, List.of(
+		gridIndexDao.deleteRgaNodes(sessionIdOne, replicaIdOne, arrOneId, List.of(
 			new Timespan(ids.get(5), 1L)
 		));
-		
+
 		assertEquals(List.of(
-				new ArrayNode().setArrayId(arrOneId).setNodeId(ids.get(4)).setDataId(ids.get(1))
-					.setReferenceNodeId(arrOneId).setIsDeleted(false),
-				new ArrayNode().setArrayId(arrOneId).setNodeId(ids.get(6)).setDataId(ids.get(0))
-					.setReferenceNodeId(ids.get(5)).setIsDeleted(false)
-			), 
-			gridIndexDao.getArrayNodesInOrder(sessionIdOne, replicaIdOne, arrOneId, limit, offset)
+				new RGANode().setNodeId(arrOneId).setDataId(ids.get(4)).setDataId(ids.get(1))
+					.setRefId(arrOneId).setIsDeleted(false),
+				new RGANode().setNodeId(arrOneId).setDataId(ids.get(6)).setDataId(ids.get(0))
+					.setRefId(ids.get(5)).setIsDeleted(false)
+			),
+			gridIndexDao.getRgaNodesInOrder(sessionIdOne, replicaIdOne, arrOneId, false, limit, offset)
 		);
-		
+		assertEquals(List.of(
+				new RGANode().setNodeId(arrOneId).setDataId(ids.get(4)).setDataId(ids.get(1))
+						.setRefId(arrOneId).setIsDeleted(false),
+				new RGANode().setNodeId(arrOneId).setDataId(ids.get(5)).setDataId(ids.get(3))
+						.setRefId(ids.get(4)).setIsDeleted(true),
+				new RGANode().setNodeId(arrOneId).setDataId(ids.get(6)).setDataId(ids.get(0))
+						.setRefId(ids.get(5)).setIsDeleted(false)
+			),
+			gridIndexDao.getRgaNodesInOrder(sessionIdOne, replicaIdOne, arrOneId, true, limit, offset)
+		);
+
 		// Now insert an additional node after 4
 		valuesOne = List.of(
-			new ArrayNode().setArrayId(arrOneId).setNodeId(ids.get(7)).setDataId(ids.get(8))
-				.setReferenceNodeId(ids.get(4)).setIsDeleted(false)
+			new RGANode().setNodeId(arrOneId).setDataId(ids.get(7)).setDataId(ids.get(8))
+				.setRefId(ids.get(4)).setIsDeleted(false)
 		);
-		
+
 		valuesOne.forEach(a -> {
-			assertEquals(Optional.of(a.getReferenceNodeId()), gridIndexDao.findArrayInsertLocation(sessionIdOne, replicaIdOne, a));
+			assertEquals(Optional.of(a.getRefId()), gridIndexDao.findRgaInsertLocation(sessionIdOne, replicaIdOne, a));
 			gridIndexDao.insertIntoArray(sessionIdOne, replicaIdOne, a);
 		});
 		
 		assertEquals(List.of(
-				new ArrayNode().setArrayId(arrOneId).setNodeId(ids.get(4)).setDataId(ids.get(1))
-					.setReferenceNodeId(arrOneId).setIsDeleted(false),
-				new ArrayNode().setArrayId(arrOneId).setNodeId(ids.get(7)).setDataId(ids.get(8))
-					.setReferenceNodeId(ids.get(4)).setIsDeleted(false),
-				new ArrayNode().setArrayId(arrOneId).setNodeId(ids.get(6)).setDataId(ids.get(0))
-					.setReferenceNodeId(ids.get(5)).setIsDeleted(false)
+				new RGANode().setNodeId(arrOneId).setDataId(ids.get(4)).setDataId(ids.get(1))
+					.setRefId(arrOneId).setIsDeleted(false),
+				new RGANode().setNodeId(arrOneId).setDataId(ids.get(7)).setDataId(ids.get(8))
+					.setRefId(ids.get(4)).setIsDeleted(false),
+				new RGANode().setNodeId(arrOneId).setDataId(ids.get(6)).setDataId(ids.get(0))
+					.setRefId(ids.get(5)).setIsDeleted(false)
 			),
-			gridIndexDao.getArrayNodesInOrder(sessionIdOne, replicaIdOne, arrOneId, limit, offset)
+			gridIndexDao.getRgaNodesInOrder(sessionIdOne, replicaIdOne, arrOneId, false, limit, offset)
 		);
-		
+		assertEquals(List.of(
+				new RGANode().setNodeId(arrOneId).setDataId(ids.get(4)).setDataId(ids.get(1))
+					.setRefId(arrOneId).setIsDeleted(false),
+				new RGANode().setNodeId(arrOneId).setDataId(ids.get(7)).setDataId(ids.get(8))
+					.setRefId(ids.get(4)).setIsDeleted(false),
+				new RGANode().setNodeId(arrOneId).setDataId(ids.get(5)).setDataId(ids.get(3))
+					// NOTE: the deleted node now references the new node
+					.setRefId(ids.get(7)).setIsDeleted(true),
+				new RGANode().setNodeId(arrOneId).setDataId(ids.get(6)).setDataId(ids.get(0))
+					.setRefId(ids.get(5)).setIsDeleted(false)
+			),
+			gridIndexDao.getRgaNodesInOrder(sessionIdOne, replicaIdOne, arrOneId, true, limit, offset)
+		);
+
+
 	}
 	
 	@Test
-	public void testGetArrayLastNode() {
+	public void testGetRgaLastNode() {
 		// Creates an empty array
 		LogicalTimestamp arrOneId = new LogicalTimestamp().setReplicaId(4L).setSequenceNumber(44L);
 		
 		createArray(sessionIdOne, replicaIdOne, arrOneId);
 		
 		// Call under test
-		Optional<ArrayNode> lastNode = gridIndexDao.getArrayLastNode(sessionIdOne, replicaIdOne, arrOneId);
+		Optional<RGANode> lastNode = gridIndexDao.getRgaLastNode(sessionIdOne, replicaIdOne, arrOneId);
 		
 		assertTrue(lastNode.isEmpty());
 		
-		ArrayNode firstNode = new ArrayNode()
-			.setArrayId(arrOneId)
-			.setNodeId(ids.get(4))
+		RGANode firstNode = new RGANode()
+			.setNodeId(arrOneId)
+			.setDataId(ids.get(4))
 			.setDataId(ids.get(1))
-			.setReferenceNodeId(arrOneId)
+			.setRefId(arrOneId)
 			.setIsDeleted(false);
 		
 		gridIndexDao.insertIntoArray(sessionIdOne, replicaIdOne, firstNode);
 		
 		// Call under test
-		assertEquals(Optional.of(firstNode), gridIndexDao.getArrayLastNode(sessionIdOne, replicaIdOne, arrOneId));
+		assertEquals(Optional.of(firstNode), gridIndexDao.getRgaLastNode(sessionIdOne, replicaIdOne, arrOneId));
 		
-		ArrayNode secondNode = new ArrayNode()
-			.setArrayId(arrOneId)
-			.setNodeId(ids.get(5))
+		RGANode secondNode = new RGANode()
+			.setNodeId(arrOneId)
+			.setDataId(ids.get(5))
 			.setDataId(ids.get(3))
-			.setReferenceNodeId(firstNode.getNodeId())
+			.setRefId(firstNode.getDataId())
 			.setIsDeleted(false);
 		
 		gridIndexDao.insertIntoArray(sessionIdOne, replicaIdOne, secondNode);
 		
 		// Call under test
-		assertEquals(Optional.of(secondNode), gridIndexDao.getArrayLastNode(sessionIdOne, replicaIdOne, arrOneId));
+		assertEquals(Optional.of(secondNode), gridIndexDao.getRgaLastNode(sessionIdOne, replicaIdOne, arrOneId));
 		
 		// Deletes the first node
-		gridIndexDao.deleteArrayNodes(sessionIdOne, replicaIdOne, arrOneId, List.of(
-			new Timespan(firstNode.getNodeId(), 1L)
+		gridIndexDao.deleteRgaNodes(sessionIdOne, replicaIdOne, arrOneId, List.of(
+			new Timespan(firstNode.getDataId(), 1L)
 		));
 		
 		// Call under test
-		assertEquals(Optional.of(secondNode), gridIndexDao.getArrayLastNode(sessionIdOne, replicaIdOne, arrOneId));
+		assertEquals(Optional.of(secondNode), gridIndexDao.getRgaLastNode(sessionIdOne, replicaIdOne, arrOneId));
 	}
 	
 	@Test

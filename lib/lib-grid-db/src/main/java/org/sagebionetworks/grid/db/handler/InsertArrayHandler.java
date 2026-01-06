@@ -8,7 +8,7 @@ import java.util.stream.Collectors;
 
 import org.sagebionetworks.grid.db.GridIndexDao;
 import org.sagebionetworks.grid.db.OperationHandler;
-import org.sagebionetworks.repo.model.grid.node.ArrayNode;
+import org.sagebionetworks.repo.model.grid.node.RGANode;
 import org.sagebionetworks.repo.model.grid.patch.LogicalTimestamp;
 import org.sagebionetworks.repo.model.grid.patch.operation.InsertArray;
 import org.sagebionetworks.repo.model.grid.patch.operation.OperationType;
@@ -36,15 +36,15 @@ public class InsertArrayHandler implements OperationHandler<InsertArray> {
 
 	@Override
 	public Set<LogicalTimestamp> handleBatch(String sessionId, Long replicaId, List<InsertArray> batch) {
-		List<ArrayNode> flatBatch = expandInsertArrays(batch);
+		List<RGANode> flatBatch = expandInsertArrays(batch);
 		Set<LogicalTimestamp> changes = new LinkedHashSet<LogicalTimestamp>();
 		flatBatch.forEach(a -> {
 			/*
 			 * Find the location in the RGA that this node should be inserted following the
 			 * RGA algorithm.
 			 */
-			gridDao.findArrayInsertLocation(sessionId, replicaId, a).ifPresent(r -> {
-				a.setReferenceNodeId(r);
+			gridDao.findRgaInsertLocation(sessionId, replicaId, a).ifPresent(r -> {
+				a.setRefId(r);
 				gridDao.insertIntoArray(sessionId, replicaId, a);
 				changes.add(a.getId());
 			});
@@ -63,15 +63,15 @@ public class InsertArrayHandler implements OperationHandler<InsertArray> {
 	 * @param batch
 	 * @return
 	 */
-	public List<ArrayNode> expandInsertArrays(List<InsertArray> batch) {
+	public List<RGANode> expandInsertArrays(List<InsertArray> batch) {
 		return batch.stream().flatMap(insert -> {
 			LogicalTimestamp referenceId = insert.getReferenceId();
 			List<LogicalTimestamp> elementIds = insert.getElementIds();
-			List<ArrayNode> nodes = new ArrayList<>(elementIds.size());
+			List<RGANode> nodes = new ArrayList<>(elementIds.size());
 			for (int i = 0; i < elementIds.size(); i++) {
 				LogicalTimestamp nodeId = LogicalTimestamp.newIncrement(insert.getOperationId(), i);
-				ArrayNode node = new ArrayNode().setNodeId(nodeId).setArrayId(insert.getArrayId())
-						.setReferenceNodeId(referenceId).setDataId(elementIds.get(i));
+				RGANode node = new RGANode().setDataId(nodeId).setNodeId(insert.getArrayId())
+						.setRefId(referenceId).setDataId(elementIds.get(i));
 				nodes.add(node);
 				// the next node will reference this node.
 				referenceId = nodeId;

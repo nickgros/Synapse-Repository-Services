@@ -1,7 +1,9 @@
 package org.sagebionetworks.repo.model.grid.patch;
 
+import java.io.ByteArrayOutputStream;
 import java.util.Objects;
 
+import org.sagebionetworks.repo.model.grid.EncodingUtils;
 import org.sagebionetworks.util.ValidateArgument;
 
 public class LogicalTimestamp implements Comparable<LogicalTimestamp> {
@@ -82,6 +84,22 @@ public class LogicalTimestamp implements Comparable<LogicalTimestamp> {
 		ValidateArgument.required(replicaId, "replicaId");
 		ValidateArgument.required(sequenceNumber, "sequenceNumber");
 		return replicaId + "." + sequenceNumber;
+	}
+
+	/**
+	 * Return the binary encoding of this LogicalTimestamp.
+	 * @see <a href="https://jsonjoy.com/specs/json-crdt/encoding/structural-encoding/binary-structural-format#Timestamp-Encoding">Timestamp Encoding</a>
+	 * @return
+	 */
+	public byte[] toBinary() {
+		// Each clock is encoded as two vu57 integers, where the first integer encodes the session ID, and the second integer encodes the logical time sequence number.
+		try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+			outputStream.write(EncodingUtils.encodeVu57(replicaId));
+			outputStream.write(EncodingUtils.encodeVu57(sequenceNumber));
+			return outputStream.toByteArray();
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to encode LogicalTimestamp to binary", e);
+		}
 	}
 
 	@Override

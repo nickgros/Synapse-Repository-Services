@@ -36,7 +36,7 @@ import org.sagebionetworks.repo.manager.grid.internal.replica.view.query.select.
 import org.sagebionetworks.repo.model.grid.CrdtId;
 import org.sagebionetworks.repo.model.grid.GridUtils;
 import org.sagebionetworks.repo.model.grid.ReplicaSelectionModel;
-import org.sagebionetworks.repo.model.grid.node.ArrayNode;
+import org.sagebionetworks.repo.model.grid.node.RGANode;
 import org.sagebionetworks.repo.model.grid.node.ConstantNode;
 import org.sagebionetworks.repo.model.grid.node.ObjectNode;
 import org.sagebionetworks.repo.model.grid.node.VectorNode;
@@ -232,12 +232,12 @@ public class GridReplicaViewManagerImpl implements GridReplicaViewManager {
 				.getVectors(gridSessionId, replicaId, List.of(root.getValue().get("columnNames"))).get(0);
 
 		LogicalTimestamp columnOrderArrId = root.getValue().get("columnOrder");
-		List<ArrayNode> columnOrder = gridIndexDao.getArrayNodesInOrder(gridSessionId, replicaId, columnOrderArrId,
-				1000L, 0l);
+		List<RGANode> columnOrder = gridIndexDao.getRgaNodesInOrder(gridSessionId, replicaId, columnOrderArrId,
+				false, 1000L, 0l);
 
 		Map<LogicalTimestamp, Long> columnOrderValues = gridIndexDao
 				.getConstants(gridSessionId, replicaId,
-						columnOrder.stream().map(ArrayNode::getDataId).collect(Collectors.toList()))
+						columnOrder.stream().map(RGANode::getDataId).collect(Collectors.toList()))
 				.stream().collect(Collectors.toMap(ConstantNode::getId, (c) -> ((Long) c.getConValue().getValue())));
 
 		List<Column> columns = columnOrder.stream().map(a -> {

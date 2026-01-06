@@ -6,14 +6,20 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.ByteArrayInputStream;
+import java.util.List;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.sagebionetworks.repo.model.grid.ClockTable;
 
 public class ConValueTest {
+
+    static final long replicaId = 123;
 
     @Test
     public void testIntegerConvertedToLongInConstructor() {
@@ -155,11 +161,11 @@ public class ConValueTest {
         assertNotEquals(s1.hashCode(), s2.hashCode());
     }
 
-    enum ConValueTestCase {
+    public enum ConValueTestCase {
         NULL(ConType.NULL, null, "[null]"),
         NULL_WITH_JSON_NULL(ConType.NULL, JSONObject.NULL, "[null]"),
         UNDEFINED(ConType.UNDEFINED, null, "[0,0]"),
-        TIMESTAMP(ConType.TIMESTAMP, new LogicalTimestamp().setReplicaId(123L).setSequenceNumber(456L), "[0,[123,456]]"),
+        TIMESTAMP(ConType.TIMESTAMP, new LogicalTimestamp().setReplicaId(replicaId).setSequenceNumber(456L), "[0,[123,456]]"),
         STRING_WITH_NULL_VALUE(ConType.STRING, null, "[null]", new ConValue(ConType.NULL, null)), // null value for STRING becomes NULL type after deserialization
         EMPTY_STRING(ConType.STRING, "", "[\"\"]"),
         STRING(ConType.STRING, "hello", "[\"hello\"]"),
@@ -171,7 +177,7 @@ public class ConValueTest {
         BOOLEAN_TRUE(ConType.BOOLEAN, true, "[true]"),
         BOOLEAN_FALSE(ConType.BOOLEAN, false, "[false]"),
         ARRAY(ConType.JSON_ARRAY, new JSONArray("[1,2,3]"),"[[1,2,3]]"),
-        ARRAY_EMPTU(ConType.JSON_ARRAY, new JSONArray("[]"),"[[]]"),
+        ARRAY_EMPTY(ConType.JSON_ARRAY, new JSONArray("[]"),"[[]]"),
         OBJECT(ConType.JSON_OBJECT, new JSONObject("{\"key\":99}"),"[{\"key\":99}]"),
         OBJECT_EMPTY(ConType.JSON_OBJECT, new JSONObject("{}"),"[{}]");
 
@@ -211,6 +217,29 @@ public class ConValueTest {
             expected = testCase.expectedConValueAfterDeserialize;
         }
         assertEquals(expected, reconstructed);
+    }
+
+    @ParameterizedTest
+    @EnumSource(ConValueTestCase.class)
+    public void testToFromCbor(ConValueTestCase testCase) {
+        if (ConValueTestCase.STRING_WITH_NULL_VALUE.equals(testCase)) {
+            // Skip this case, it is not applicable to this test
+            return;
+        }
+
+        ClockTable clockTable = new ClockTable(List.of(
+                // ensure the replica ID in the clock table matches that in the test case
+                new LogicalTimestamp().setReplicaId(replicaId).setSequenceNumber(500L))
+        );
+
+        // create a representative value for each supported class
+        ConValue original = new ConValue(testCase.type, testCase.value);
+
+        byte[] asCbor = original.toBinary(clockTable);
+        boolean isTimestamp = ConType.TIMESTAMP.equals(testCase.type);
+        ConValue decoded = ConValue.fromCbor(new ByteArrayInputStream(asCbor), clockTable, isTimestamp);
+
+        assertEquals(original, decoded);
     }
 
 

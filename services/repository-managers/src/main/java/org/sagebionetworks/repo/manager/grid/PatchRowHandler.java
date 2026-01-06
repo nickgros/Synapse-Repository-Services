@@ -12,6 +12,7 @@ import org.json.JSONArray;
 import org.sagebionetworks.repo.manager.grid.row.translator.ColumnTypeToConType;
 import org.sagebionetworks.repo.manager.grid.row.translator.Translator;
 import org.sagebionetworks.repo.model.dao.table.RowHandler;
+import org.sagebionetworks.repo.model.grid.node.ObjectNode;
 import org.sagebionetworks.repo.model.grid.patch.ConType;
 import org.sagebionetworks.repo.model.grid.patch.ConValue;
 import org.sagebionetworks.repo.model.grid.patch.LogicalTimestamp;
@@ -199,7 +200,16 @@ public class PatchRowHandler implements RowHandler {
 
 		lastRowRef = insertArrayRef;
 
+		// Create a new SnapshotRowHandler:
+		// Creating a snapshot instead of patches
+		// as we stream through each row, we convert the operations to nodes (maybe using a patch?)
+		// then we stream the nodes to a file, that we will continue appending to as we get more rows.
+
+		// we can remove constraints related to patch size.
+
+
 		if (this.rowCount >= rowsPerPatch) {
+			// flush to a snapshot file
 			saveCurrentPatch();
 		}
 	}
