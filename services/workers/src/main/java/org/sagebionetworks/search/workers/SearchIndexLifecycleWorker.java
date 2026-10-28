@@ -37,7 +37,7 @@ public class SearchIndexLifecycleWorker implements ChangeMessageDrivenRunner {
 	@Override
 	public void run(ProgressCallback progressCallback, ChangeMessage message)
 			throws RecoverableMessageException, Exception {
-		if (message.getObjectType() != ObjectType.ENTITY) {
+		if (message.getObjectType() != ObjectType.ENTITY && message.getObjectType() != ObjectType.SEARCH_INDEX) {
 			return;
 		}
 		processMessage(progressCallback, message);
@@ -47,18 +47,21 @@ public class SearchIndexLifecycleWorker implements ChangeMessageDrivenRunner {
 			throws RecoverableMessageException {
 		String entityId = message.getObjectId();
 		try {
+			if (message.getObjectType() == ObjectType.SEARCH_INDEX) {
+				// Source-dependency fan-out: a source table/view became available, rebuild if stale.
+				searchIndexLifecycleManager.rebuildIfStale(progressCallback, entityId);
+				return;
+			}
 			EntityType nodeType = nodeDao.getNodeTypeById(entityId);
 			if (nodeType != EntityType.searchindex) {
 				return;
 			}
 			switch (message.getChangeType()) {
 				case CREATE:
-					searchIndexLifecycleManager.handleCreate(
-							progressCallback, entityId, message.getUserId());
+					searchIndexLifecycleManager.handleCreate(progressCallback, entityId);
 					break;
 				case UPDATE:
-					searchIndexLifecycleManager.handleUpdate(
-							progressCallback, entityId, message.getUserId());
+					searchIndexLifecycleManager.handleUpdate(progressCallback, entityId);
 					break;
 				case DELETE:
 					searchIndexLifecycleManager.handleDelete(progressCallback, entityId);
@@ -75,7 +78,8 @@ public class SearchIndexLifecycleWorker implements ChangeMessageDrivenRunner {
 			LOG.warn("Source table unavailable for entity {}, retrying: {}", entityId, e.getMessage());
 			throw new RecoverableMessageException(e);
 		} catch (TableFailedException e) {
-			// Permanent failure — the manager already recorded FAILED in the DAO.
+			// The source failed. The manager does not record FAILED for a source failure, so the
+			// source's next TABLE_STATUS_EVENT(AVAILABLE) rebuilds the index.
 			LOG.error("Source table failed for entity {}: {}", entityId, e.getMessage());
 		} catch (LockReleaseFailedException | CannotAcquireLockException | DeadlockLoserDataAccessException e) {
 			LOG.warn("Transient lock exception for entity {}, retrying: {}", entityId, e.getMessage());

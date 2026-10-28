@@ -65,6 +65,26 @@ public interface GridDao {
 	Optional<GridReplica> getGridReplica(String sessionId, Long replicaId);
 
 	/**
+	 * Get the last sequence number the replica has used for its own patches.
+	 *
+	 * @param sessionId
+	 * @param replicaId
+	 * @return {@link Optional#empty()} if the replica does not exist or has not yet recorded a sequence number.
+	 */
+	Optional<Long> getReplicaSequenceHighWater(String sessionId, Long replicaId);
+
+	/**
+	 * Record the last sequence number the replica has used for its own patches, and rotate the replica's etag. The
+	 * high-water mark never moves backwards: a value lower than the current one leaves it unchanged.
+	 *
+	 * @param sessionId
+	 * @param replicaId
+	 * @param sequenceHighWater
+	 * @throws NotFoundException if the replica does not exist.
+	 */
+	void setReplicaSequenceHighWater(String sessionId, Long replicaId, long sequenceHighWater);
+
+	/**
 	 * Get the replica createdBy of the replica matching the parameters.
 	 *
 	 * @param sessionId
@@ -73,6 +93,15 @@ public interface GridDao {
 	 * @return
 	 */
 	Optional<Long> getReplicaCreatedBy(String sessionId, Long replicaId);
+
+	/**
+	 * Get the summary information (connection status and type) for a single replica.
+	 *
+	 * @param sessionId
+	 * @param replicaId
+	 * @return {@link Optional#empty()} if no replica with the given id exists in the session.
+	 */
+	Optional<GridReplicaInfo> getReplicaInfo(String sessionId, Long replicaId);
 
 	/**
 	 * List all replicas for a session with their connection status.
@@ -114,6 +143,18 @@ public interface GridDao {
      * @return
      */
     Optional<GridConnectionInfo> getSingletonConnection(String sessionId, EventSource source);
+
+    /**
+     * Get the connection a given user holds for the given session and event source.
+     * Unlike {@link #getSingletonConnection(String, EventSource)} this works for
+     * non-singleton sources, where each user has at most one connection per source.
+     *
+     * @param sessionId
+     * @param userId
+     * @param source
+     * @return
+     */
+    Optional<GridConnectionInfo> getUserConnection(String sessionId, Long userId, EventSource source);
     
 	/**
 	 * Remove an actvie connection.
@@ -219,6 +260,22 @@ public interface GridDao {
 	 * @param benefactorIds
 	 */
 	void updateSessionBenefactorIds(String sessionId, Set<Long> benefactorIds);
+
+	/**
+	 * Update the synchronized source entity version number for a grid session.
+	 * @param sessionId
+	 * @param sourceVersion
+	 */
+	void updateSourceEntityVersion(String sessionId, Long sourceVersion);
+
+	/**
+	 * Update the bound JSON schema $id recorded on a grid session. This is the
+	 * schema the grid's rows are validated against; it is updated when the source's
+	 * bound schema changes during synchronization.
+	 * @param sessionId
+	 * @param schemaId
+	 */
+	void updateSessionSchemaId(String sessionId, String schemaId);
 
 	/**
 	 * Get the set of benefactor IDs stored for a grid session.

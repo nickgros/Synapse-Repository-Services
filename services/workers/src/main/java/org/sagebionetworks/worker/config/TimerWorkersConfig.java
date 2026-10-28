@@ -4,12 +4,14 @@ import org.sagebionetworks.auth.workers.ExpiredAccessTokenWorker;
 import org.sagebionetworks.database.semaphore.CountingSemaphore;
 import org.sagebionetworks.file.worker.FileHandleAssociationScanDispatcherWorker;
 import org.sagebionetworks.principal.worker.InactiveUsersWorker;
+import org.sagebionetworks.repo.manager.search.SemanticEmbeddingBootstrapper;
 import org.sagebionetworks.table.worker.ReplicatedToViewConsumerWorker;
 import org.sagebionetworks.tos.workers.TermsOfServiceLatestVersionRefreshWorker;
 import org.sagebionetworks.worker.SemaphoreGarbageCollection;
 import org.sagebionetworks.worker.utils.StackStatusGate;
 import org.sagebionetworks.workers.util.semaphore.SemaphoreGatedWorkerStack;
 import org.sagebionetworks.workers.util.semaphore.SemaphoreGatedWorkerStackConfiguration;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.quartz.SimpleTriggerFactoryBean;
@@ -80,7 +82,7 @@ public class TimerWorkersConfig {
 		return new WorkerTriggerBuilder()
 			.withStack(new SemaphoreGatedWorkerStack(countingSemaphore, config))
 			.withRepeatInterval(60 * 60 * 1000)
-			.withStartDelay(60 * 60 * 1000)
+			.withStartDelay(337)
 			.build();
 		
 	}
@@ -92,7 +94,7 @@ public class TimerWorkersConfig {
 	
 	@Bean
 	public SimpleTriggerFactoryBean replicatedToViewConsumerWorkerTrigger(ReplicatedToViewConsumerWorker worker,
-			Long replicatedToViewConsumerWorkerRepeatIntervalMS) {
+			@Qualifier("replicatedToViewConsumerWorkerRepeatIntervalMS") Long replicatedToViewConsumerWorkerRepeatIntervalMS) {
 		SemaphoreGatedWorkerStackConfiguration config = new SemaphoreGatedWorkerStackConfiguration();
 		
 		config.setSemaphoreLockKey("replicatedToViewConsumerWorker");
@@ -125,6 +127,27 @@ public class TimerWorkersConfig {
 			.withStartDelay(10_000)
 			.build();
 
+	}
+
+	@Bean
+	public SimpleTriggerFactoryBean semanticEmbeddingBootstrapTrigger(SemanticEmbeddingBootstrapper semanticEmbeddingBootstrapper) {
+		SemaphoreGatedWorkerStackConfiguration config = new SemaphoreGatedWorkerStackConfiguration();
+
+		config.setSemaphoreLockKey("semanticEmbeddingBootstrap");
+		config.setProgressingRunner(progressCallback -> semanticEmbeddingBootstrapper.bootstrapSemanticEmbedding());
+		// A single holder keeps two nodes from registering duplicate models; the lease covers a
+		// registration's retries and deploy wait.
+		config.setSemaphoreMaxLockCount(1);
+		config.setSemaphoreLockTimeoutSec(120);
+		config.setGate(stackStatusGate);
+
+		return new WorkerTriggerBuilder()
+			.withStack(new SemaphoreGatedWorkerStack(countingSemaphore, config))
+			.withRepeatInterval(30 * 60 * 1000)
+			// A new stack registers its model shortly after the workers start, before SearchIndex
+			// builds and semantic queries need it.
+			.withStartDelay(60_000)
+			.build();
 	}
 
 	@Bean

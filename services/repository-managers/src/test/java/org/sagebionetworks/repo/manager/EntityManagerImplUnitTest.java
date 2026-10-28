@@ -5,11 +5,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
-import static org.mockito.ArgumentMatchers.anyListOf;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anySetOf;
+import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.notNull;
@@ -20,8 +21,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 import static org.sagebionetworks.repo.manager.EntityManagerImpl.DEFAULT_SORT_BY;
 import static org.sagebionetworks.repo.manager.EntityManagerImpl.DEFAULT_SORT_DIRECTION;
@@ -49,6 +50,7 @@ import org.mockito.Mockito;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.sagebionetworks.repo.manager.entity.EntityAuthorizationManager;
+import org.sagebionetworks.repo.manager.entity.RecordSetCsvDescriptors;
 import org.sagebionetworks.repo.manager.file.FileHandleManager;
 import org.sagebionetworks.repo.manager.schema.AnnotationsTranslator;
 import org.sagebionetworks.repo.manager.schema.JsonSchemaManager;
@@ -67,6 +69,7 @@ import org.sagebionetworks.repo.model.NextPageToken;
 import org.sagebionetworks.repo.model.Node;
 import org.sagebionetworks.repo.model.ObjectType;
 import org.sagebionetworks.repo.model.Project;
+import org.sagebionetworks.repo.model.RecordSet;
 import org.sagebionetworks.repo.model.UnauthorizedException;
 import org.sagebionetworks.repo.model.UserInfo;
 import org.sagebionetworks.repo.model.annotation.v2.Annotations;
@@ -96,6 +99,7 @@ import org.sagebionetworks.repo.model.schema.ListValidationResultsRequest;
 import org.sagebionetworks.repo.model.schema.ListValidationResultsResponse;
 import org.sagebionetworks.repo.model.schema.ValidationResults;
 import org.sagebionetworks.repo.model.schema.ValidationSummaryStatistics;
+import org.sagebionetworks.repo.model.table.CsvTableDescriptor;
 import org.sagebionetworks.repo.model.table.Table;
 import org.sagebionetworks.repo.web.NotFoundException;
 
@@ -401,6 +405,232 @@ public class EntityManagerImplUnitTest {
 	}
 
 	@Test
+	public void testUpdateEntityWithRecordSetUpsertKeyChange() throws Exception {
+		Node node = stubRecordSetNode(List.of("a"), null);
+		RecordSet updated = recordSetToUpdate(List.of("a", "b"), null);
+
+		// call under test
+		boolean wasNewVersionCreated = entityManager.updateEntity(mockUser, updated, false, null);
+
+		assertTrue(wasNewVersionCreated);
+		verify(mockNodeManager).update(eq(mockUser), same(node), any(), eq(true));
+		assertEquals(List.of("a", "b"), node.getUpsertKey());
+		// The upsertKey alone decides this, so the MD5 of the data file is never read.
+		verifyNoInteractions(mockFileHandleManager);
+		// the version label and comment are reset so the forced revision is labeled with
+		// its revision number rather than inheriting the label the caller supplied.
+		assertNull(updated.getVersionLabel());
+		assertNull(updated.getVersionComment());
+	}
+
+	@Test
+	public void testUpdateEntityWithRecordSetCsvDescriptorChange() throws Exception {
+		Node node = stubRecordSetNode(List.of("a"), new CsvTableDescriptor().setIsFirstLineHeader(true));
+		CsvTableDescriptor updatedDescriptor = new CsvTableDescriptor().setIsFirstLineHeader(true).setSeparator("\t");
+		RecordSet updated = recordSetToUpdate(List.of("a"), updatedDescriptor);
+
+		// call under test
+		boolean wasNewVersionCreated = entityManager.updateEntity(mockUser, updated, false, null);
+
+		assertTrue(wasNewVersionCreated);
+		verify(mockNodeManager).update(eq(mockUser), same(node), any(), eq(true));
+		assertEquals(updatedDescriptor, node.getCsvDescriptor());
+		verifyNoInteractions(mockFileHandleManager);
+		assertNull(updated.getVersionLabel());
+		assertNull(updated.getVersionComment());
+	}
+
+	/**
+	 * A RecordSet is a FileEntity, so swapping in a data file with different content
+	 * forces a revision even when nothing about the parsing changed.
+	 */
+	@Test
+	public void testUpdateEntityWithRecordSetDataFileChange() throws Exception {
+		Node node = stubRecordSetNode(List.of("a"), null);
+		RecordSet updated = recordSetToUpdate(List.of("a"), null).setDataFileHandleId("202");
+		when(mockFileHandleManager.isMatchingMD5("101", "202")).thenReturn(false);
+
+		// call under test
+		boolean wasNewVersionCreated = entityManager.updateEntity(mockUser, updated, false, null);
+
+		assertTrue(wasNewVersionCreated);
+		verify(mockNodeManager).update(eq(mockUser), same(node), any(), eq(true));
+		assertEquals("202", node.getFileHandleId());
+		assertNull(updated.getVersionLabel());
+		assertNull(updated.getVersionComment());
+	}
+
+	/**
+	 * Re-uploading identical content produces a new file handle, which is not a
+	 * change to what the revision means.
+	 */
+	@Test
+	public void testUpdateEntityWithRecordSetDataFileChangeAndSameMD5() throws Exception {
+		Node node = stubRecordSetNode(List.of("a"), null);
+		RecordSet updated = recordSetToUpdate(List.of("a"), null).setDataFileHandleId("202");
+		when(mockFileHandleManager.isMatchingMD5("101", "202")).thenReturn(true);
+
+		// call under test
+		boolean wasNewVersionCreated = entityManager.updateEntity(mockUser, updated, false, null);
+
+		assertFalse(wasNewVersionCreated);
+		verify(mockNodeManager).update(eq(mockUser), same(node), any(), eq(false));
+		assertEquals("a label", updated.getVersionLabel());
+		assertEquals("a comment", updated.getVersionComment());
+	}
+
+	@Test
+	public void testUpdateEntityWithRecordSetAndUnchangedMetadata() throws Exception {
+		Node node = stubRecordSetNode(List.of("a"), new CsvTableDescriptor().setIsFirstLineHeader(true));
+		RecordSet updated = recordSetToUpdate(List.of("a"), new CsvTableDescriptor().setIsFirstLineHeader(true));
+
+		// call under test
+		boolean wasNewVersionCreated = entityManager.updateEntity(mockUser, updated, false, null);
+
+		assertFalse(wasNewVersionCreated);
+		verify(mockNodeManager).update(eq(mockUser), same(node), any(), eq(false));
+		verifyNoInteractions(mockFileHandleManager);
+		assertEquals("a label", updated.getVersionLabel());
+		assertEquals("a comment", updated.getVersionComment());
+	}
+
+	/**
+	 * The csvDescriptor of a RecordSet is null until a caller sets it, so a null on
+	 * both sides must not be mistaken for a change.
+	 */
+	@Test
+	public void testUpdateEntityWithRecordSetAndNullCsvDescriptorOnBothSides() throws Exception {
+		Node node = stubRecordSetNode(List.of("a"), null);
+		RecordSet updated = recordSetToUpdate(List.of("a"), null);
+
+		// call under test
+		boolean wasNewVersionCreated = entityManager.updateEntity(mockUser, updated, false, null);
+
+		assertFalse(wasNewVersionCreated);
+		verify(mockNodeManager).update(eq(mockUser), same(node), any(), eq(false));
+	}
+
+	/**
+	 * Recording the parsing default explicitly must not be mistaken for a change to
+	 * how the CSV is read.
+	 */
+	@Test
+	public void testUpdateEntityWithRecordSetAndCsvDescriptorSetToTheDefault() throws Exception {
+		Node node = stubRecordSetNode(List.of("a"), null);
+		RecordSet updated = recordSetToUpdate(List.of("a"), RecordSetCsvDescriptors.DEFAULT_RECORD_SET_CSV_DESCRIPTOR);
+
+		// call under test
+		boolean wasNewVersionCreated = entityManager.updateEntity(mockUser, updated, false, null);
+
+		assertFalse(wasNewVersionCreated);
+		verify(mockNodeManager).update(eq(mockUser), same(node), any(), eq(false));
+	}
+
+	/**
+	 * Dropping an explicitly recorded default is likewise not a change to how the
+	 * CSV is read.
+	 */
+	@Test
+	public void testUpdateEntityWithRecordSetAndCsvDescriptorClearedFromTheDefault() throws Exception {
+		Node node = stubRecordSetNode(List.of("a"), RecordSetCsvDescriptors.DEFAULT_RECORD_SET_CSV_DESCRIPTOR);
+		RecordSet updated = recordSetToUpdate(List.of("a"), null);
+
+		// call under test
+		boolean wasNewVersionCreated = entityManager.updateEntity(mockUser, updated, false, null);
+
+		assertFalse(wasNewVersionCreated);
+		verify(mockNodeManager).update(eq(mockUser), same(node), any(), eq(false));
+	}
+
+	/**
+	 * Spelling out every default the CSV is read and written with is not a change
+	 * to how the CSV is read, so it must not force a version the caller did not ask
+	 * for.
+	 */
+	@Test
+	public void testUpdateEntityWithRecordSetAndCsvDescriptorWithEveryDefaultSpelledOut() throws Exception {
+		Node node = stubRecordSetNode(List.of("a"), null);
+		RecordSet updated = recordSetToUpdate(List.of("a"), new CsvTableDescriptor().setIsFirstLineHeader(true)
+				.setSeparator(",").setQuoteCharacter("\"").setEscapeCharacter("\\").setLineEnd("\n"));
+
+		// call under test
+		boolean wasNewVersionCreated = entityManager.updateEntity(mockUser, updated, false, null);
+
+		assertFalse(wasNewVersionCreated);
+		verify(mockNodeManager).update(eq(mockUser), same(node), any(), eq(false));
+		assertEquals("a label", updated.getVersionLabel());
+	}
+
+	/**
+	 * A caller that already asked for a new version does not need one forced, and
+	 * keeps the version label and comment it supplied.
+	 */
+	@Test
+	public void testUpdateEntityWithRecordSetUpsertKeyChangeAndNewVersionRequested() throws Exception {
+		Node node = stubRecordSetNode(List.of("a"), null);
+		RecordSet updated = recordSetToUpdate(List.of("a", "b"), null);
+		when(mockNodeManager.getCurrentRevisionNumber("syn123")).thenReturn(1L);
+
+		// call under test
+		boolean wasNewVersionCreated = entityManager.updateEntity(mockUser, updated, true, null);
+
+		assertTrue(wasNewVersionCreated);
+		verify(mockNodeManager).update(eq(mockUser), same(node), any(), eq(true));
+		assertEquals(List.of("a", "b"), node.getUpsertKey());
+		assertEquals("a label", updated.getVersionLabel());
+		assertEquals("a comment", updated.getVersionComment());
+	}
+
+	/**
+	 * A forced revision is subject to the same version limit as a requested one. At
+	 * the limit the edit is rejected rather than applied in place, because applying
+	 * it in place would retroactively change how an already-saved revision is parsed.
+	 */
+	@Test
+	public void testUpdateEntityWithRecordSetUpsertKeyChangeAtVersionLimit() throws Exception {
+		stubRecordSetNode(List.of("a"), null);
+		RecordSet updated = recordSetToUpdate(List.of("a", "b"), null);
+		when(mockNodeManager.getCurrentRevisionNumber("syn123"))
+				.thenReturn((long) EntityManagerImpl.MAX_NUMBER_OF_REVISIONS);
+
+		String message = assertThrows(IllegalArgumentException.class, () -> {
+			// call under test
+			entityManager.updateEntity(mockUser, updated, false, null);
+		}).getMessage();
+
+		assertEquals("Exceeded the maximum number of " + EntityManagerImpl.MAX_NUMBER_OF_REVISIONS
+				+ " versions for a single Entity", message);
+		verify(mockNodeManager, never()).update(any(), any(), any(), anyBoolean());
+	}
+
+	/**
+	 * Stubs the current state of a RecordSet node. The data file handle matches
+	 * {@link #recordSetToUpdate(List, CsvTableDescriptor)} so the data-file
+	 * auto-version rule never fires.
+	 */
+	private Node stubRecordSetNode(List<String> upsertKey, CsvTableDescriptor csvDescriptor) {
+		Node node = new Node();
+		node.setFileHandleId("101");
+		node.setUpsertKey(upsertKey);
+		node.setCsvDescriptor(csvDescriptor);
+		when(mockNodeManager.getNode(mockUser, "syn123")).thenReturn(node);
+		when(mockNodeManager.getEntityPropertyAnnotations(mockUser, "syn123"))
+				.thenReturn(new org.sagebionetworks.repo.model.Annotations());
+		return node;
+	}
+
+	private RecordSet recordSetToUpdate(List<String> upsertKey, CsvTableDescriptor csvDescriptor) {
+		RecordSet recordSet = new RecordSet();
+		recordSet.setId("syn123");
+		recordSet.setDataFileHandleId("101");
+		recordSet.setUpsertKey(upsertKey);
+		recordSet.setCsvDescriptor(csvDescriptor);
+		recordSet.setVersionLabel("a label");
+		recordSet.setVersionComment("a comment");
+		return recordSet;
+	}
+
+	@Test
 	public void testGetChildren() {
 
 		when(mockAuthorizationManger.hasAccess(mockUser, childRequest.getParentId(), ACCESS_TYPE.READ))
@@ -408,7 +638,7 @@ public class EntityManagerImplUnitTest {
 		when(mockEntityAclManager.getNonvisibleChildren(mockUser, childRequest.getParentId()))
 				.thenReturn(nonvisibleChildren);
 
-		when(mockNodeManager.getChildren(anyString(), anyListOf(EntityType.class), anySetOf(Long.class),
+		when(mockNodeManager.getChildren(anyString(), anyList(), anySet(),
 				any(SortBy.class), any(Direction.class), anyLong(), anyLong())).thenReturn(childPage);
 
 		ChildStatsResponse statsReponse = new ChildStatsResponse().withSumFileSizesBytes(123L).withTotalChildCount(4L);
@@ -458,7 +688,7 @@ public class EntityManagerImplUnitTest {
 	@Test
 	public void testGetChildrenNullParentId() {
 
-		when(mockNodeManager.getChildren(anyString(), anyListOf(EntityType.class), anySetOf(Long.class),
+		when(mockNodeManager.getChildren(anyString(), anyList(), anySet(),
 				any(SortBy.class), any(Direction.class), anyLong(), anyLong())).thenReturn(childPage);
 
 		ChildStatsResponse statsReponse = new ChildStatsResponse().withSumFileSizesBytes(123L).withTotalChildCount(4L);
@@ -516,7 +746,7 @@ public class EntityManagerImplUnitTest {
 		when(mockEntityAclManager.getNonvisibleChildren(mockUser, childRequest.getParentId()))
 				.thenReturn(nonvisibleChildren);
 
-		when(mockNodeManager.getChildren(anyString(), anyListOf(EntityType.class), anySetOf(Long.class),
+		when(mockNodeManager.getChildren(anyString(), anyList(), anySet(),
 				any(SortBy.class), any(Direction.class), anyLong(), anyLong())).thenReturn(childPage);
 
 		ChildStatsResponse statsReponse = new ChildStatsResponse().withSumFileSizesBytes(123L).withTotalChildCount(4L);
@@ -642,7 +872,7 @@ public class EntityManagerImplUnitTest {
 		DataType dataType = DataType.SENSITIVE_DATA;
 		// call under test
 		entityManager.changeEntityDataType(mockUser, entityId, dataType);
-		verify(mockObjectTypeManger).changeObjectsDataType(mockUser, entityId, ObjectType.ENTITY, dataType);
+		verify(mockObjectTypeManger).changeObjectsDataType(mockUser, entityId, ObjectType.ENTITY, dataType, null);
 	}
 
 	@Test
@@ -905,7 +1135,7 @@ public class EntityManagerImplUnitTest {
 		when(mockAuthorizationManger.hasAccess(any(), any(), any(ACCESS_TYPE.class))).thenReturn(AuthorizationStatus.authorized());
 		Project project = new Project();
 		project.setId(entityId);
-		doReturn(project).when(entityManagerSpy).getEntity(any(String.class), any());
+		doReturn(project).when(entityManagerSpy).getEntityWithoutAuthorization(any(String.class), any());
 		org.sagebionetworks.repo.model.annotation.v2.Annotations annos = AnnotationsV2Utils.emptyAnnotations();
 		when(mockNodeManager.getUserAnnotations(any())).thenReturn(annos);
 		JSONObject jsonResult = new JSONObject();
@@ -916,10 +1146,10 @@ public class EntityManagerImplUnitTest {
 		assertNotNull(object);
 		assertEquals(jsonResult, object);
 		verify(mockAuthorizationManger).hasAccess(mockUser, entityId, ACCESS_TYPE.READ);
-		verify(entityManagerSpy).getEntity(entityId, null);
+		verify(entityManagerSpy).getEntityWithoutAuthorization(entityId, null);
 		verify(mockNodeManager).getUserAnnotations(entityId);
 		verify(mockAnnotationTranslator).writeToJsonObject(project, annos, schema);
-		verifyZeroInteractions(mockDerivedAnnotationDao);
+		verifyNoMoreInteractions(mockDerivedAnnotationDao);
 	}
 	
 	@Test
@@ -928,7 +1158,7 @@ public class EntityManagerImplUnitTest {
 		when(mockAuthorizationManger.hasAccess(any(), any(), any(ACCESS_TYPE.class))).thenReturn(AuthorizationStatus.authorized());
 		Project project = new Project();
 		project.setId(entityId);
-		doReturn(project).when(entityManagerSpy).getEntity(any(String.class), any());
+		doReturn(project).when(entityManagerSpy).getEntityWithoutAuthorization(any(String.class), any());
 		org.sagebionetworks.repo.model.annotation.v2.Annotations annos = AnnotationsV2Utils.emptyAnnotations();
 		when(mockDerivedAnnotationDao.getDerivedAnnotations(any())).thenReturn(Optional.empty());
 		when(mockNodeManager.getUserAnnotations(any())).thenReturn(annos);
@@ -940,7 +1170,7 @@ public class EntityManagerImplUnitTest {
 		assertNotNull(object);
 		assertEquals(jsonResult, object);
 		verify(mockAuthorizationManger).hasAccess(mockUser, entityId, ACCESS_TYPE.READ);
-		verify(entityManagerSpy).getEntity(entityId, null);
+		verify(entityManagerSpy).getEntityWithoutAuthorization(entityId, null);
 		verify(mockNodeManager).getUserAnnotations(entityId);
 		verify(mockAnnotationTranslator).writeToJsonObject(project, annos, schema);
 		verify(mockDerivedAnnotationDao).getDerivedAnnotations(entityId);
@@ -951,7 +1181,7 @@ public class EntityManagerImplUnitTest {
 		when(mockAuthorizationManger.hasAccess(any(), any(), any(ACCESS_TYPE.class))).thenReturn(AuthorizationStatus.authorized());
 		Project project = new Project();
 		project.setId(entityId);
-		doReturn(project).when(entityManagerSpy).getEntity(any(String.class), any());
+		doReturn(project).when(entityManagerSpy).getEntityWithoutAuthorization(any(String.class), any());
 		org.sagebionetworks.repo.model.annotation.v2.Annotations annos = AnnotationsV2Utils.emptyAnnotations();
 		when(mockNodeManager.getUserAnnotations(any())).thenReturn(annos);
 		JSONObject jsonResult = new JSONObject();
@@ -966,10 +1196,10 @@ public class EntityManagerImplUnitTest {
 		assertNotNull(object);
 		assertEquals(jsonResult, object);
 		verify(mockAuthorizationManger).hasAccess(mockUser, entityId, ACCESS_TYPE.READ);
-		verify(entityManagerSpy).getEntity(entityId, null);
+		verify(entityManagerSpy).getEntityWithoutAuthorization(entityId, null);
 		verify(mockNodeManager).getUserAnnotations(entityId);
 		verify(mockAnnotationTranslator).writeToJsonObject(project, annos, schema);
-		verifyZeroInteractions(mockDerivedAnnotationDao);
+		verifyNoMoreInteractions(mockDerivedAnnotationDao);
 	}
 
 	@Test
@@ -982,7 +1212,7 @@ public class EntityManagerImplUnitTest {
 		verify(mockAuthorizationManger).hasAccess(mockUser, entityId, ACCESS_TYPE.READ);
 		verifyNoMoreInteractions(mockNodeManager);
 		verifyNoMoreInteractions(mockAnnotationTranslator);
-		verifyZeroInteractions(mockDerivedAnnotationDao);
+		verifyNoMoreInteractions(mockDerivedAnnotationDao);
 	}
 	
 	@Test
@@ -1009,7 +1239,7 @@ public class EntityManagerImplUnitTest {
 		Project project = new Project();
 		project.setId(entityId);
 		project.setEtag("some-etag");
-		doReturn(project).when(entityManagerSpy).getEntity(any(String.class), any());
+		doReturn(project).when(entityManagerSpy).getEntityWithoutAuthorization(any(String.class), any());
 		org.sagebionetworks.repo.model.annotation.v2.Annotations annos = AnnotationsV2Utils.emptyAnnotations();
 		when(mockNodeManager.getUserAnnotations(any())).thenReturn(annos);
 		JSONObject jsonResult = new JSONObject();
@@ -1021,10 +1251,10 @@ public class EntityManagerImplUnitTest {
 		assertEquals(project.getId(), subject.getObjectId());
 		assertEquals(project.getEtag(), subject.getObjectEtag());
 		assertEquals(org.sagebionetworks.repo.model.schema.ObjectType.entity, subject.getObjectType());
-		verify(entityManagerSpy).getEntity(entityId, null);
+		verify(entityManagerSpy).getEntityWithoutAuthorization(entityId, null);
 		verify(mockNodeManager).getUserAnnotations(entityId);
 		verify(mockAnnotationTranslator).writeToJsonObject(project, annos, schema);
-		verifyZeroInteractions(mockDerivedAnnotationDao);
+		verifyNoMoreInteractions(mockDerivedAnnotationDao);
 	}
 	
 	@Test
@@ -1033,7 +1263,7 @@ public class EntityManagerImplUnitTest {
 		Project project = new Project();
 		project.setId(entityId);
 		project.setEtag("some-etag");
-		doReturn(project).when(entityManagerSpy).getEntity(any(String.class), any());
+		doReturn(project).when(entityManagerSpy).getEntityWithoutAuthorization(any(String.class), any());
 		org.sagebionetworks.repo.model.annotation.v2.Annotations annos = AnnotationsV2Utils.emptyAnnotations();
 		when(mockNodeManager.getUserAnnotations(any())).thenReturn(annos);
 		when(mockDerivedAnnotationDao.getDerivedAnnotations(any())).thenReturn(Optional.empty());
@@ -1046,7 +1276,7 @@ public class EntityManagerImplUnitTest {
 		assertEquals(project.getId(), subject.getObjectId());
 		assertEquals(project.getEtag(), subject.getObjectEtag());
 		assertEquals(org.sagebionetworks.repo.model.schema.ObjectType.entity, subject.getObjectType());
-		verify(entityManagerSpy).getEntity(entityId, null);
+		verify(entityManagerSpy).getEntityWithoutAuthorization(entityId, null);
 		verify(mockNodeManager).getUserAnnotations(entityId);
 		verify(mockAnnotationTranslator).writeToJsonObject(project, annos, schema);
 		verify(mockDerivedAnnotationDao).getDerivedAnnotations(entityId);
@@ -1057,7 +1287,7 @@ public class EntityManagerImplUnitTest {
 		Project project = new Project();
 		project.setId(entityId);
 		project.setEtag("some-etag");
-		doReturn(project).when(entityManagerSpy).getEntity(any(String.class), any());
+		doReturn(project).when(entityManagerSpy).getEntityWithoutAuthorization(any(String.class), any());
 		org.sagebionetworks.repo.model.annotation.v2.Annotations annos = AnnotationsV2Utils.emptyAnnotations();
 		when(mockNodeManager.getUserAnnotations(any())).thenReturn(annos);
 		JSONObject jsonResult = new JSONObject();
@@ -1073,10 +1303,10 @@ public class EntityManagerImplUnitTest {
 		assertEquals(project.getId(), subject.getObjectId());
 		assertEquals(project.getEtag(), subject.getObjectEtag());
 		assertEquals(org.sagebionetworks.repo.model.schema.ObjectType.entity, subject.getObjectType());
-		verify(entityManagerSpy).getEntity(entityId, null);
+		verify(entityManagerSpy).getEntityWithoutAuthorization(entityId, null);
 		verify(mockNodeManager).getUserAnnotations(entityId);
 		verify(mockAnnotationTranslator).writeToJsonObject(project, annos, schema);
-		verifyZeroInteractions(mockDerivedAnnotationDao);
+		verifyNoMoreInteractions(mockDerivedAnnotationDao);
 	}
 	
 	@Test
@@ -1088,7 +1318,7 @@ public class EntityManagerImplUnitTest {
 		});
 		verifyNoMoreInteractions(mockNodeManager);
 		verifyNoMoreInteractions(mockAnnotationTranslator);
-		verifyZeroInteractions(mockDerivedAnnotationDao);
+		verifyNoMoreInteractions(mockDerivedAnnotationDao);
 	}
 	
 	@Test
@@ -1600,7 +1830,7 @@ public class EntityManagerImplUnitTest {
 			entityManager.getDerivedAnnotationKeys(mockUser, entityId);
 		});
 		verify(mockAuthorizationManger).hasAccess(mockUser, entityId, ACCESS_TYPE.READ);
-		verifyZeroInteractions(mockDerivedAnnotationDao);
+		verifyNoMoreInteractions(mockDerivedAnnotationDao);
 	}
 	
 	@Test

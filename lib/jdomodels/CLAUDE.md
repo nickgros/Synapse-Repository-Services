@@ -46,20 +46,38 @@ new FieldColumn("changeNumber", COL_CHANGES_CHANGE_NUM, true)  // isPrimaryKey
 
 **`MigratableTableTranslation<D, B>`** — converts between DBO and backup object for migration. Use `BasicMigratableTableTranslation<D>` when the DBO and backup class are the same (most common case).
 
+### Columns vs a JSON Document
+
+Applies to new DBOs and to replacing an XStream blob. Most existing DBOs (e.g. `DBOOAuthClient`, `DBOColumnModel`, `DBOFormTemplate`) store the whole DTO as JSON beside a few copied columns; leave them as they are unless the table is being reworked, and convert a blob that maps 1:1 onto one JSON column with `XStreamToJsonTranslator`.
+
+Such a DBO stores its object's content in one JSON document column. A field earns its own column only when the database acts on it:
+
+- SQL filters, joins, sorts, groups or aggregates on it
+- it belongs to a key, a constraint (foreign key, unique) or an index
+- migration or the file handle scanner reads it as a column: the backup id, the etag, file handle ids
+
+Every other field lives in the document. Adding, renaming or removing a document field is a code-only change; a column needs DDL, and renaming or retyping one needs the cross-stack bridge described in the root CLAUDE.md.
+
+- **Document type**: the document column holds a dedicated type with only the fields that have no column (an allowlist), so no field is stored twice; never a copy of the DTO with its column fields cleared. When the API model is flat, define the content type as an internal JSON schema in `lib/lib-auto-generated` under a `...model.<feature>.internal` package (e.g. `org.sagebionetworks.repo.model.dataaccess.internal.RequestContent`); internal types are never referenced by a controller, so they stay out of the REST API. Free-form values (e.g. `schemaData`) stay inside the document as they are.
+- **Mapping**: use pure functions that return new objects, e.g. `toDbo(dto)`, `toContent(dto)`, `toDto(dbo)`; no methods that fill in an object passed in. See `RequestUtils` and `SubmissionUtils`.
+- **Repeating children**: a repeating child that SQL filters on lives in a child table and is read in the same statement as its parent through a correlated `JSON_ARRAYAGG(JSON_OBJECT(...))` subquery column, not with a follow-up query. `JSON_ARRAYAGG` does not order its elements, so sort in Java. See `DBOSubmissionDAOImpl` accessor changes.
+- **File handle ids**: `BasicFileHandleAssociationScanner` reads file handle ids from columns, so each file handle field gets one: `BIGINT` for a single id, a `JSON` array for a list. Mark it `withHasFileHandleRef(true)`, plus `withIsFileHandleIdJsonList(true)` for a list.
+- **Replacing an XStream blob**: the blob's content becomes the columns and the document. Columns that sat beside the blob stay as they are and win over their copies inside the blob; a field from the blob gets a column only under the rule above, which usually means its file handle ids.
+
 ### Creating a New DBO
 
 1. Define the DBO class implementing `MigratableDatabaseObject<D, B>`
-2. Define `FieldColumn[]` matching the DDL columns exactly
+2. Choose the columns per [Columns vs a JSON Document](#columns-vs-a-json-document), then define `FieldColumn[]` matching the DDL columns exactly
 3. Implement `getTableMapping()` with an anonymous `TableMapping` inner class
 4. Implement `getMigratableTableType()` returning a `MigrationType` enum value
 5. Add table/column constants to `SqlConstants`
 6. Create DDL file in `src/main/resources/schema/`
-7. Register in `src/main/resources/dbo-beans.spb.xml` (order matters — after dependencies)
+7. Place the DBO/DAO in a package listed in `DboAutoDiscovery.DBO_PACKAGES` and annotate the DAO `@Repository` — registration is by classpath auto-discovery, not XML (see [Spring Configuration](#spring-configuration))
 
 ### Primary vs Secondary Tables
 
-- **Primary**: Has etag column (`withIsEtag(true)`), migrated independently, registered in `dbo-beans.spb.xml`
-- **Secondary**: Owned by a primary table, discovered via `getSecondaryTypes()`, has FK to owner's backup ID, NOT registered in `dbo-beans.spb.xml`
+- **Primary**: Has etag column (`withIsEtag(true)`), migrated independently, discovered by `DboAutoDiscovery` (classpath scan) as a top-level `DatabaseObject`
+- **Secondary**: Owned by a primary table, discovered via the owner's `getSecondaryTypes()`, has FK to owner's backup ID — never scanned directly
 
 ## DAO Pattern
 
@@ -102,8 +120,13 @@ Naming: `TABLE_` prefix for table names, `COL_` for columns, `DDL_` for DDL path
 
 ## Spring Configuration
 
-- **`dbo-beans.spb.xml`** — registers primary migratable DBO types in migration order (dependencies first). This is the most important config file for migration.
-- Additional `*-spb.xml` files for feature-specific beans
+DBO registration is **classpath auto-discovery** via Java config in `src/main/java/org/sagebionetworks/repo/model/config/`.
+
+- **`JdoModelsConfig`** — `@Configuration`/`@ComponentScan` entry point; also bootstraps principal IDs (**do not change those IDs** — they are real production objects).
+- **`DboAutoDiscovery`** — classpath-scans the fixed `DBO_PACKAGES` array for `DatabaseObject` implementations and auto-classifies primary vs secondary via `getSecondaryTypes()`. A new DBO in a package **not** in `DBO_PACKAGES` is silently never registered or migrated (no startup error).
+- **`DboDependencyAnalyzer`** — topologically sorts DDL creation order by parsing `FOREIGN KEY ... REFERENCES` out of each DDL file, so ordering is derived, not hand-maintained.
+
+For the migration engine's startup invariants (enum order, CHANGE-last, backup-column validation), see `dbo/migration/CLAUDE.md`.
 
 ## Database Split
 
@@ -121,6 +144,8 @@ MyClass obj = JDOSecondaryPropertyUtils.createObjectFromJSON(MyClass.class, json
 ```
 
 Do NOT create custom `ObjectMapper` or `JSONObjectAdapter` serialization code in DAO classes — the utilities in `JDOSecondaryPropertyUtils` are already tested and handle null/error cases.
+
+For **opaque, non-`JSONEntity`** JSON columns — where the value is a free-form `Map`/`List`/`JSONObject`/scalar rather than a generated POJO (e.g. `TextAnalyzer.settings`, `SynonymSet.definition`, `SearchConfiguration.defaultAnalyzer`) — use `OpaqueJsonColumnCodecUtil` (`dbo.search`) instead. Pass the actual `Map`/`List`/`JSONObject`; **never pre-stringify JSON before `serialize()`** — a `String` is encoded as a JSON scalar (quoted), not as raw JSON passthrough.
 
 ## SQL Patterns
 
